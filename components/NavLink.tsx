@@ -30,13 +30,35 @@ const icons: Record<string, React.ReactNode> = {
   ),
 };
 
-export function NavLink({ href, label, icon }: { href: string; label: string; icon: string }) {
+export function NavLink({
+  href, label, icon, badge = 0, badgeWarn = 0,
+}: {
+  href: string; label: string; icon: string;
+  /** Vencidos: insignia roja. Tiene prioridad sobre badgeWarn. */
+  badge?: number;
+  /** Por vencer en <2h: insignia ambar. Solo si no hay vencidos. */
+  badgeWarn?: number;
+}) {
   const pathname = usePathname();
   const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+
+  const alerta =
+    badge > 0
+      ? { n: badge, tipo: "crit", texto: `${badge} fuera de SLA` }
+      : badgeWarn > 0
+      ? { n: badgeWarn, tipo: "warn", texto: `${badgeWarn} por vencer` }
+      : null;
+
   return (
     <Link href={href} className={"navlink" + (active ? " active" : "")}>
       {icons[icon]}
       {label}
+      {alerta && (
+        <span className={"nav-badge " + alerta.tipo} title={alerta.texto}>
+          {alerta.n}
+          <span className="sr-only"> {alerta.texto}</span>
+        </span>
+      )}
     </Link>
   );
 }

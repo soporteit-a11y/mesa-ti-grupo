@@ -62,6 +62,14 @@ export default async function TicketsPage({ searchParams }: { searchParams: Reco
     } catch (e) {}
   }
 
+  // Aviso de SLA. Se calcula sobre TODOS los tickets, no sobre los filtrados:
+  // es una alerta global, no debe cambiar segun lo que estes mirando.
+  // Reutiliza los tickets ya cargados, sin consulta extra.
+  const vencidos = tickets.filter((t) => {
+    const s = slaInfo(t.created_at, t.resolved_at, t.status, t.cat_sla ?? 24, t.priority || "Baja");
+    return !s.closed && !s.onTime;
+  }).length;
+
   return (
     <>
       <div className="topbar">
@@ -76,6 +84,19 @@ export default async function TicketsPage({ searchParams }: { searchParams: Reco
       </div>
 
       <div className="content">
+        {vencidos > 0 && (
+          <a href="/tickets?status=abiertos" className="alert-bar">
+            <span className="ab-ic" aria-hidden="true">!</span>
+            <span className="ab-txt">
+              <b>{vencidos}</b>{" "}
+              {vencidos === 1
+                ? "ticket abierto está fuera de SLA"
+                : "tickets abiertos están fuera de SLA"}
+            </span>
+            <span className="ab-cta">Ver abiertos →</span>
+          </a>
+        )}
+
         <Filters companies={companies} categories={categories} collaborators={collaborators} count={rows.length} />
 
         {rows.length === 0 ? (

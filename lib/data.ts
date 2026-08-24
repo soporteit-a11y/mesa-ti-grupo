@@ -25,6 +25,34 @@ export async function getCanned() {
   return sql!`SELECT id, title, text FROM canned_responses ORDER BY title`;
 }
 
+/* ---------- Avisos de SLA (contador del menu lateral) ---------- */
+export type AlertCounts = {
+  breached: number;  // tickets abiertos que ya pasaron su fecha limite
+  dueSoon: number;   // tickets abiertos que vencen en las proximas 2 horas
+};
+
+// Misma formula de SLA que slaInfo() en lib/priority.ts y que el KPI del
+// dashboard: horas de la categoria x multiplicador de prioridad.
+// Si cambias los multiplicadores, cambialos tambien en los otros dos sitios.
+export async function getAlertCounts(): Promise<AlertCounts> {
+  await ensureSchema();
+  const rows = await sql!`
+    WITH abiertos AS (
+      SELECT t.created_at + (
+        COALESCE(cat.sla_hours, 24)
+        * (CASE t.priority WHEN 'Alta' THEN 0.5 WHEN 'Baja' THEN 1.5 ELSE 1 END)
+      ) * interval '1 hour' AS vence
+      FROM tickets t
+      LEFT JOIN categories cat ON cat.name = t.category
+      WHERE t.status <> 'resuelto'
+    )
+    SELECT
+      COUNT(*) FILTER (WHERE now() > vence)::int AS breached,
+      COUNT(*) FILTER (WHERE now() <= vence AND vence <= now() + interval '2 hour')::int AS due_soon
+    FROM abiertos`;
+  return { breached: rows[0]?.breached || 0, dueSoon: rows[0]?.due_soon || 0 };
+}
+
 export type TicketRow = {
   id: number;
   title: string;

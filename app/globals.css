@@ -57,6 +57,45 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 .navlink:hover { background: var(--surface-2); color: var(--ink); }
 .navlink.active { background: var(--accent-wash); color: var(--accent-ink); font-weight: 600; }
 .navlink .ic { width: 17px; height: 17px; opacity: .85; }
+
+/* Insignia de avisos de SLA en el menu */
+.nav-badge {
+  margin-left: auto; flex-shrink: 0;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+  font-variant-numeric: tabular-nums; line-height: 1;
+  min-width: 19px; height: 19px; padding: 0 6px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.nav-badge.crit { background: var(--crit); color: #0A0E15; }
+.nav-badge.warn { background: var(--high); color: #0A0E15; }
+
+/* Texto solo para lectores de pantalla */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Franja de aviso sobre la bandeja de tickets */
+.alert-bar {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 14px; margin-bottom: 14px;
+  border: 1px solid var(--crit); border-left-width: 3px;
+  background: var(--crit-w); border-radius: var(--radius-sm);
+  font-size: 13.5px; color: var(--ink-soft);
+}
+.alert-bar:hover { background: #38201a; }
+.alert-bar .ab-ic {
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--crit); color: #0A0E15;
+  display: grid; place-items: center;
+  font-family: var(--font-mono); font-weight: 700; font-size: 12px;
+}
+.alert-bar .ab-txt { flex: 1; min-width: 0; }
+.alert-bar .ab-txt b { color: var(--crit); font-variant-numeric: tabular-nums; }
+.alert-bar .ab-cta {
+  flex-shrink: 0; font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--crit); white-space: nowrap;
+}
 .sidebar .spacer { flex: 1; }
 .side-foot { font-size: 11px; color: var(--faint); font-family: var(--font-mono); padding: 10px; border-top: 1px solid var(--line); }
 
@@ -420,6 +459,8 @@ code { font-family: var(--font-mono); font-size: 12.5px; background: var(--surfa
   .brand { padding: 0; }
   .sidebar-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
   .navlink { justify-content: center; padding: 9px 6px; font-size: 12px; gap: 7px; }
+  /* con el nav centrado, la insignia no debe empujarse a la derecha */
+  .nav-badge { margin-left: 0; }
 }
 
 /* ---------- <= 760px: tablet estrecha y movil ---------- */
@@ -437,6 +478,11 @@ code { font-family: var(--font-mono); font-size: 12.5px; background: var(--surfa
   .stat-card .sc-ic svg { width: 16px; height: 16px; }
   .stat-card .sc-v { font-size: 1.45rem; }
   .panel { padding: 15px 16px; }
+
+  /* Franja de aviso: el enlace baja a su propia linea */
+  .alert-bar { flex-wrap: wrap; row-gap: 6px; }
+  .alert-bar .ab-txt { flex: 1 1 auto; }
+  .alert-bar .ab-cta { flex: 1 1 100%; text-align: right; }
 
   /* Filtros: dos por fila */
   .filters { gap: 8px; }

@@ -1,6 +1,8 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { NavLink } from "@/components/NavLink";
+import { hasDb } from "@/lib/db";
+import { getAlertCounts } from "@/lib/data";
 
 export const metadata: Metadata = {
   title: "Mesa de Servicios TI — Grupo Empresarial",
@@ -13,7 +15,14 @@ export const viewport: Viewport = {
   themeColor: "#0A0E15",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Contador de avisos del menu. Nunca debe tumbar el layout: si la base no
+  // esta conectada o la consulta falla, se muestra sin insignia.
+  let alerts = { breached: 0, dueSoon: 0 };
+  if (hasDb) {
+    try { alerts = await getAlertCounts(); } catch (e) {}
+  }
+
   return (
     <html lang="es">
       <body>
@@ -29,7 +38,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="nav-label">Operación</div>
             <nav className="sidebar-nav">
               <NavLink href="/" label="Dashboard" icon="grid" />
-              <NavLink href="/tickets" label="Mesa de ayuda" icon="inbox" />
+              <NavLink
+                href="/tickets"
+                label="Mesa de ayuda"
+                icon="inbox"
+                badge={alerts.breached}
+                badgeWarn={alerts.dueSoon}
+              />
               <NavLink href="/rutas" label="Rutas de trabajo" icon="route" />
               <NavLink href="/config" label="Configuración" icon="settings" />
             </nav>

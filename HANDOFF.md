@@ -4,12 +4,12 @@
 > Si lo pegas en cualquier otro LLM/IA (ChatGPT, Gemini, Copilot, otro Claude, etc.), esa IA
 > tiene aquí **todo** lo necesario para entender el sistema y reconstruirlo idéntico desde cero:
 > contexto de negocio, decisiones de arquitectura, esquema de base de datos, el código fuente
-> íntegro de los 35 archivos, el sistema de diseño, el procedimiento de despliegue y las trampas
+> íntegro de los 34 archivos, el sistema de diseño, el procedimiento de despliegue y las trampas
 > ya descubiertas.
 >
 > **Fecha del traspaso:** 24 de agosto de 2026
-> **Última actualización:** 24 de agosto de 2026 — títulos de rutas editables, diseño responsive,
-> repositorio git inicializado. Ver el registro de cambios en §14.
+> **Última actualización:** 24 de agosto de 2026 — contador de avisos de SLA en el menú,
+> despliegue por git ya operativo. Ver el registro de cambios en §14.
 > **Estado:** en producción y en uso real.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
@@ -230,14 +230,18 @@ horas objetivo = horas_base_de_la_categoría × multiplicador_de_prioridad
 - **Evaluación**: para tickets cerrados se compara contra `resolved_at`; para los abiertos, contra
   la hora actual.
 
-Está implementado **dos veces y ambas deben mantenerse sincronizadas**:
+Está implementado **tres veces y las tres deben mantenerse sincronizadas**:
 
-1. En TypeScript — `slaInfo()` en `lib/priority.ts`, usado para pintar cada chip de la tabla y la
-   insignia del diálogo de detalle.
+1. En TypeScript — `slaInfo()` en `lib/priority.ts`, usado para pintar cada chip de la tabla, la
+   insignia del diálogo de detalle y el conteo de la franja de aviso de `/tickets`.
 2. En SQL — la expresión `COUNT(*) FILTER (...)` con `CASE t.priority WHEN 'Alta' THEN 0.5 ...`
    dentro de `getSupportDashboard()` en `lib/data.ts`, que calcula el KPI "Fuera de SLA".
+3. En SQL — el CTE `abiertos` de `getAlertCounts()` en `lib/data.ts`, que alimenta la insignia
+   del menú lateral.
 
-Si cambias los multiplicadores, **cámbialos en los dos sitios.**
+Si cambias los multiplicadores, **cámbialos en los tres sitios.** Es la deuda técnica más
+propensa a causar incoherencias del proyecto: unificarlo en una sola función SQL sería una mejora
+razonable.
 
 ### 5.7 Estado en la URL
 
@@ -427,7 +431,7 @@ helpdesk/
 │   └── priority.ts           # constantes + cálculo de SLA
 │
 └── components/
-    ├── NavLink.tsx                 # enlace lateral con icono e indicador de activo
+    ├── NavLink.tsx                 # enlace lateral: icono, activo e insignia de avisos
     ├── Setup.tsx                   # pantalla "conecta la base de datos"
     ├── DateRangeFilter.tsx         # rango de fechas del dashboard
     ├── Filters.tsx                 # 5 filtros de la bandeja de tickets
@@ -445,11 +449,10 @@ helpdesk/
     ├── DeleteInitiativeButton.tsx  # botón ✕ para borrar una ruta completa
     ├── TaskList.tsx                # lista de tareas: arrastrar-soltar + botones ▲▼ en móvil
     ├── TaskItem.tsx                # tarea: casilla + título editable + borrar
-    ├── AddTaskForm.tsx             # input "+ Agregar tarea"
-    └── TaskToggle.tsx              # ⚠️ HUÉRFANO — ya nadie lo importa, se puede borrar
+    └── AddTaskForm.tsx             # input "+ Agregar tarea"
 ```
 
-**35 archivos** sin contar `node_modules`, `.next` ni `package-lock.json`.
+**34 archivos** sin contar `node_modules`, `.next` ni `package-lock.json`.
 
 ---
 
@@ -472,13 +475,17 @@ Antes de cualquier despliegue, siempre:
 npm run build
 ```
 
-### Despliegue a producción — vía git (recomendada)
+### Despliegue a producción — vía git ✅ OPERATIVA
 
-El proyecto tiene un repositorio git propio (`git init` hecho el 24-ago-2026, commit inicial
-`c381bd1`, 37 archivos versionados). **Esta es la vía que debe usarse.**
+**Esta es la vía en uso.** Quedó montada el 24-ago-2026 y es la única que debe usarse.
 
-Falta un paso único que debe hacer el propietario de la cuenta: crear el repositorio remoto en
-GitHub y enlazarlo a Vercel. Una vez hecho, todo despliegue es simplemente:
+| | |
+|---|---|
+| Repositorio | `soporteit-a11y/mesa-ti-grupo` (privado, en GitHub) |
+| Rama de producción | `main` |
+| Enlace con Vercel | proyecto `mesa-ti-grupo`, despliegue automático en cada push |
+
+Desplegar es simplemente:
 
 ```bash
 git add -A
@@ -486,32 +493,39 @@ git commit -m "descripción del cambio"
 git push
 ```
 
-Vercel construye y publica solo, en cada push a la rama de producción.
+Vercel detecta el push, construye y publica. Por la red viaja **solo el diff**, no el proyecto
+entero. Tarda entre 1 y 3 minutos.
 
-Para dejarlo montado (una sola vez):
+**Detalle de credenciales que conviene conocer:** la máquina tiene guardada en Git Credential
+Manager otra cuenta de GitHub (`aiportal-dev`) que **no** tiene permiso sobre este repositorio.
+Para que no interfiera, el remoto lleva el usuario incrustado en la URL y el repositorio activa
+`credential.useHttpPath`:
 
 ```bash
-# 1. Crear un repositorio PRIVADO vacío en github.com (sin README ni .gitignore)
-# 2. Enlazarlo y subir:
-git remote add origin https://github.com/TU-USUARIO/mesa-ti-grupo.git
-git branch -M main
-git push -u origin main
-# 3. En Vercel: proyecto mesa-ti-grupo → Settings → Git → Connect Git Repository
+git remote -v
+# origin  https://soporteit-a11y@github.com/soporteit-a11y/mesa-ti-grupo.git
+git config credential.useHttpPath   # true
 ```
 
-**Que sea privado importa:** el repositorio no contiene credenciales (`.gitignore` excluye `.env`),
-pero sí todos los tickets sembrados y los nombres reales de colaboradores del grupo.
+Si algún día un push falla con `403 Permission denied to aiportal-dev`, es que se perdió esa
+configuración: basta con volver a fijar la URL del remoto con el usuario incluido.
 
-### Despliegue a producción — vía árbol de archivos (alternativa)
+**El repositorio es privado a propósito:** no contiene credenciales (`.gitignore` excluye `.env`),
+pero sí los nombres reales de los colaboradores del grupo y el historial de tickets.
 
-Mientras no exista el remoto de git, el despliegue se hace subiendo el árbol completo de archivos
-a Vercel (proyecto `mesa-ti-grupo`, objetivo `production`).
+### Despliegue a producción — vía árbol de archivos (obsoleta, solo referencia histórica)
 
-> **Limitación práctica descubierta el 24-ago-2026:** el proyecto ya creció lo suficiente
-> (~120 KB de código fuente) como para que enviar el árbol completo en una sola operación choque
-> con el límite de salida de un asistente de IA. Es decir: **este método ya no es viable de forma
-> fiable por IA**, y por eso el paso a git dejó de ser opcional. Un humano con la CLI de Vercel
-> (`vercel --prod`) no tiene este problema.
+Antes de montar git, el despliegue se hacía subiendo el árbol completo a Vercel. **Ya no se usa
+y no debe usarse.** Se documenta porque explica varias cicatrices del proyecto.
+
+> **Limitación que lo dejó inservible:** el proyecto creció hasta ~120 KB de código fuente, y
+> enviar el árbol completo en una sola operación supera el límite de salida de un asistente de IA.
+> Por eso el paso a git dejó de ser una mejora opcional.
+
+También existe la CLI de Vercel como alternativa manual (`npm i -g vercel`, `vercel login`,
+`vercel --prod`), que sube solo los archivos cuyo hash Vercel no tiene ya. Está instalada en la
+máquina pero **sin sesión iniciada**, porque git resolvió el problema antes. Sirve como plan B si
+alguna vez GitHub no está disponible.
 
 > ### ⚠️ TRAMPA CRÍTICA — leer antes de desplegar por árbol de archivos
 >
@@ -561,6 +575,26 @@ Un despliegue tarda entre 1 y 3 minutos en propagarse al alias de producción.
 
 ## 11. Recorrido funcional, módulo por módulo
 
+### Común a todas las páginas — insignia de avisos
+
+El menú lateral muestra una insignia en **Mesa de ayuda** cuando hay tickets abiertos en riesgo:
+
+- **Roja** con el número de tickets **ya fuera de SLA** (tiene prioridad)
+- **Ámbar** con los que **vencen en menos de 2 horas**, solo si no hay ninguno vencido
+- **Sin insignia** si no hay nada pendiente
+
+El dato sale de `getAlertCounts()` (`lib/data.ts`), que llama el layout raíz. Tres detalles de
+implementación importantes:
+
+1. `app/layout.tsx` es un Server Component **asíncrono** por esto. La consulta va envuelta en
+   `if (hasDb)` + `try/catch`: si la base no está conectada o falla, se muestra el menú sin
+   insignia en lugar de tumbar toda la aplicación. **No quites esa protección** — sin ella, un
+   fallo de base de datos deja el sitio entero en blanco, no solo una página.
+2. Es una consulta por carga de página. Es un único `COUNT` sobre los tickets abiertos y a esta
+   escala no se nota, pero conviene tenerlo presente si el volumen crece mucho.
+3. Las páginas son `force-dynamic`, así que la insignia se recalcula en cada navegación. No hay
+   nada que invalidar.
+
 ### Dashboard (`/`)
 
 Cuatro tarjetas KPI: **Total de tickets**, **Cerrados** (con %), **Abiertos** (con %) y
@@ -578,6 +612,11 @@ flexbox sobre el SVG (`position:absolute; inset:0`), no con `text-anchor` — es
 dos veces, no lo cambies a coordenadas SVG.
 
 ### Mesa de ayuda (`/tickets`)
+
+Si hay tickets abiertos fuera de SLA, lo primero de la página es una **franja roja de aviso** con
+el conteo, que enlaza a `?status=abiertos`. Su número se calcula en el servidor sobre los tickets
+ya cargados —sin consulta extra— y **siempre refleja el total global**, no lo que estés filtrando:
+es una alerta, no una estadística de la vista.
 
 Tabla con 9 columnas: `#`, Asunto, Solicitante, Empresa, Categoría, Prioridad, SLA, Creado, Estado.
 
@@ -624,41 +663,25 @@ asociadas — `deleteCompany` cuenta las tres cosas y sale sin hacer nada si enc
 
 ## 12. Trabajo pendiente
 
-### Bloqueado — requiere acción del propietario
+### Alertas — siguientes niveles
 
-**Crear el repositorio remoto en GitHub y enlazarlo a Vercel** (§10). Es el desbloqueo más
-importante: sin él, cada despliegue depende del método por árbol de archivos, que ya no es fiable
-al tamaño actual del proyecto. Son unos 5 minutos.
-
-### Análisis pendiente — alertas y notificaciones
-
-El usuario preguntó si se pueden añadir avisos para tickets y rutas. **Sí se puede.** Tres niveles,
-de menor a mayor coste:
-
-**Nivel 1 — Avisos dentro de la aplicación.** Un contador en el menú lateral junto a "Mesa de ayuda"
-con los tickets vencidos o por vencer, y una franja de aviso arriba de la bandeja. No necesita
-infraestructura nueva: la consulta ya existe en la práctica, es la misma expresión SQL que alimenta
-el KPI "Fuera de SLA" (§5.6). Coste: gratis, ~1 hora. Limitación: solo se ve al abrir la página.
+El **Nivel 1 está implementado** (insignia en el menú + franja en la bandeja, §11). Quedan dos
+niveles posibles, ninguno pedido todavía:
 
 **Nivel 2 — Resumen diario por correo.** Un Vercel Cron Job definido en `vercel.json` que llame a
 un endpoint (`/api/cron/alertas`) y envíe el correo con Resend (capa gratuita: 3.000 correos/mes).
-Coste: gratis, ~3 horas, requiere dar de alta una API key de Resend. **Limitación real e importante:
-el plan Hobby de Vercel solo permite cron con frecuencia diaria** — para avisos por hora hace falta
-el plan Pro (20 USD/mes).
+Coste: gratis, ~3 horas, requiere dar de alta una API key de Resend. **Limitación real: el plan
+Hobby de Vercel solo permite cron con frecuencia diaria** — para avisos por hora hace falta Pro
+(20 USD/mes). Sería el primer `/api/` del proyecto, que hasta ahora no tiene ninguno.
 
 **Nivel 3 — Tiempo real (WebSockets o push del navegador).** Desproporcionado para un sistema de un
 solo usuario. No recomendado.
 
-**Observación importante sobre las rutas de trabajo:** hoy **no se les puede poner alerta por fecha**,
-porque la tabla `initiatives` no tiene ninguna columna de vencimiento. Para avisar de rutas atrasadas
-habría que añadir antes un `due_date`, o bien basar el aviso en inactividad (por ejemplo, "ninguna
-tarea completada en 30 días"), que sí se puede calcular con los datos actuales.
-
-Recomendación: empezar por el Nivel 1, que cubre el 80 % del valor sin coste ni dependencias nuevas.
-
-### Limpieza pendiente
-
-Borrar `components/TaskToggle.tsx`, huérfano desde que lo sustituyeron `TaskItem` + `TaskList`.
+**Pendiente conocido — alertas para rutas de trabajo.** Hoy **no se les puede poner alerta por
+fecha**, porque `initiatives` no tiene columna de vencimiento. Para avisar de rutas atrasadas habría
+que añadir antes un `due_date` (más su campo en el diálogo de alta y en la tarjeta), o bien basar el
+aviso en inactividad —por ejemplo "ninguna tarea completada en 30 días"—, que sí se puede calcular
+con los datos actuales pero requiere una columna de fecha en `initiative_tasks`, que tampoco existe.
 
 ### Limitación de fondo, no planteada aún por el usuario
 
@@ -700,7 +723,43 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
-### 24 de agosto de 2026 — Títulos editables, responsive y repositorio git
+### 24 de agosto de 2026 (tanda 3) — Contador de avisos de SLA y git operativo
+
+**1. Contador de vencidos** *(petición del usuario; es el "Nivel 1" del análisis de alertas)*
+- `lib/data.ts`: nueva `getAlertCounts()`, con un CTE `abiertos` que calcula la fecha límite de
+  cada ticket abierto y devuelve dos cifras: `breached` (ya vencidos) y `dueSoon` (vencen en
+  menos de 2 h).
+- `app/layout.tsx`: pasa a ser **Server Component asíncrono** para poder consultar el contador.
+  La llamada va protegida con `if (hasDb)` + `try/catch` — sin eso, un fallo de base de datos
+  dejaría en blanco toda la aplicación en lugar de una sola página.
+- `components/NavLink.tsx`: props nuevas `badge` y `badgeWarn`. Roja si hay vencidos, ámbar si
+  solo hay próximos a vencer, nada si no hay riesgo. Incluye texto para lectores de pantalla.
+- `app/tickets/page.tsx`: franja de aviso roja enlazada a `?status=abiertos`. Su conteo se
+  calcula sobre los tickets ya cargados, sin consulta adicional, y es global (no depende de los
+  filtros activos).
+- CSS: `.nav-badge`, `.alert-bar` y utilidad `.sr-only`. En móvil la insignia pierde el
+  `margin-left: auto` para no romper el centrado del menú.
+- **Efecto colateral a vigilar:** la fórmula de SLA pasa de estar duplicada a estar **triplicada**
+  (§5.6). Es la deuda técnica más propensa a incoherencias del proyecto.
+
+**2. Despliegue por git, ya operativo**
+- Repositorio `soporteit-a11y/mesa-ti-grupo` (privado) creado y enlazado al proyecto de Vercel.
+- Hubo que resolver un cruce de credenciales: Git Credential Manager tenía guardada la cuenta
+  `aiportal-dev`, sin permiso sobre este repositorio. Se resolvió incrustando el usuario en la
+  URL del remoto y activando `credential.useHttpPath`, **sin borrar** la credencial de la otra
+  cuenta, que el usuario emplea en otros proyectos (§10).
+- Secuencia de configuración en Vercel, por si hay que repetirla: Login Connection de GitHub →
+  instalar la app de Vercel en el repositorio → enlazar desde *Settings → Git* del proyecto.
+  Este último paso **solo se puede hacer desde el panel**: la API únicamente permite crear
+  proyectos nuevos, y devuelve `409 Project already exists` con uno existente.
+- Aprendizaje: **conectar el repositorio no despliega lo que ya existe.** Vercel espera al
+  siguiente push. Hizo falta un commit nuevo para arrancar el primer despliegue.
+
+**3. Limpieza**
+- Eliminado `components/TaskToggle.tsx`, huérfano desde que lo sustituyeron `TaskItem` +
+  `TaskList`. Verificado sin importadores antes de borrarlo.
+
+### 24 de agosto de 2026 (tanda 2) — Títulos editables, responsive y repositorio git
 
 **1. Títulos de las rutas editables** *(petición del usuario)*
 - Nuevo componente `components/InitiativeTitle.tsx`, con el mismo patrón de edición en línea
@@ -887,7 +946,7 @@ npm-debug.log*
 
 ### `lib/db.ts`
 
-**El archivo más importante del proyecto.** Conexión a Postgres, `ensureSchema()` idempotente con las 9 tablas, migraciones controladas por la tabla `meta` y las cinco funciones de semilla (empresas y servicios, categorías, respuestas rápidas, los 68 tickets reales del CSV, colaboradores e iniciativas).
+**El archivo más importante del proyecto.** Conexión a Postgres, `ensureSchema()` idempotente con las 9 tablas, migraciones controladas por la tabla `meta` y las cinco funciones de semilla.
 
 ```ts
 import { neon } from "@neondatabase/serverless";
@@ -1208,7 +1267,7 @@ async function seedInitiatives(q: NonNullable<typeof sql>) {
 
 ### `lib/data.ts`
 
-Todas las consultas de lectura. Ninguna escribe. Cada una llama primero a `ensureSchema()`.
+Todas las consultas de lectura, ninguna escribe. Incluye `getAlertCounts()`, que alimenta la insignia del menú, y `getSupportDashboard()`, con el KPI de SLA. **Ambas repiten la fórmula de SLA en SQL** (§5.6).
 
 ```ts
 import { sql, ensureSchema } from "./db";
@@ -1236,6 +1295,34 @@ export async function getCategories() {
 export async function getCanned() {
   await ensureSchema();
   return sql!`SELECT id, title, text FROM canned_responses ORDER BY title`;
+}
+
+/* ---------- Avisos de SLA (contador del menu lateral) ---------- */
+export type AlertCounts = {
+  breached: number;  // tickets abiertos que ya pasaron su fecha limite
+  dueSoon: number;   // tickets abiertos que vencen en las proximas 2 horas
+};
+
+// Misma formula de SLA que slaInfo() en lib/priority.ts y que el KPI del
+// dashboard: horas de la categoria x multiplicador de prioridad.
+// Si cambias los multiplicadores, cambialos tambien en los otros dos sitios.
+export async function getAlertCounts(): Promise<AlertCounts> {
+  await ensureSchema();
+  const rows = await sql!`
+    WITH abiertos AS (
+      SELECT t.created_at + (
+        COALESCE(cat.sla_hours, 24)
+        * (CASE t.priority WHEN 'Alta' THEN 0.5 WHEN 'Baja' THEN 1.5 ELSE 1 END)
+      ) * interval '1 hour' AS vence
+      FROM tickets t
+      LEFT JOIN categories cat ON cat.name = t.category
+      WHERE t.status <> 'resuelto'
+    )
+    SELECT
+      COUNT(*) FILTER (WHERE now() > vence)::int AS breached,
+      COUNT(*) FILTER (WHERE now() <= vence AND vence <= now() + interval '2 hour')::int AS due_soon
+    FROM abiertos`;
+  return { breached: rows[0]?.breached || 0, dueSoon: rows[0]?.due_soon || 0 };
 }
 
 export type TicketRow = {
@@ -1422,7 +1509,7 @@ export async function getInitiativeSummary() {
 
 ### `lib/priority.ts`
 
-Constantes compartidas y el cálculo de SLA en TypeScript: `PRIORITY_SLA_MULT`, `slaInfo()` y `fmtSlaHours()`. Las constantes `PRIORITIES`/`PRIORITY_META`/`computeScore`/`levelFor`/`slaForLevel` son del modelo P1–P4 antiguo y ya no se usan.
+Constantes compartidas y el cálculo de SLA en TypeScript: `PRIORITY_SLA_MULT`, `slaInfo()` y `fmtSlaHours()`. Las constantes del modelo P1–P4 antiguo siguen ahí pero ya no se usan.
 
 ```ts
 // Modelo de priorización — mismo criterio que el playbook del grupo.
@@ -1827,12 +1914,14 @@ export async function reorderTasks(formData: FormData) {
 
 ### `app/layout.tsx`
 
-Shell de la aplicación. Exporta `metadata` y **`viewport`** (imprescindible para el responsive) y envuelve los enlaces en `<nav className="sidebar-nav">`.
+Shell de la aplicación. **Server Component asíncrono**: consulta `getAlertCounts()` para la insignia del menú, protegido con `hasDb` + `try/catch`. Exporta `metadata` y `viewport`.
 
 ```tsx
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { NavLink } from "@/components/NavLink";
+import { hasDb } from "@/lib/db";
+import { getAlertCounts } from "@/lib/data";
 
 export const metadata: Metadata = {
   title: "Mesa de Servicios TI — Grupo Empresarial",
@@ -1845,7 +1934,14 @@ export const viewport: Viewport = {
   themeColor: "#0A0E15",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Contador de avisos del menu. Nunca debe tumbar el layout: si la base no
+  // esta conectada o la consulta falla, se muestra sin insignia.
+  let alerts = { breached: 0, dueSoon: 0 };
+  if (hasDb) {
+    try { alerts = await getAlertCounts(); } catch (e) {}
+  }
+
   return (
     <html lang="es">
       <body>
@@ -1861,7 +1957,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="nav-label">Operación</div>
             <nav className="sidebar-nav">
               <NavLink href="/" label="Dashboard" icon="grid" />
-              <NavLink href="/tickets" label="Mesa de ayuda" icon="inbox" />
+              <NavLink
+                href="/tickets"
+                label="Mesa de ayuda"
+                icon="inbox"
+                badge={alerts.breached}
+                badgeWarn={alerts.dueSoon}
+              />
               <NavLink href="/rutas" label="Rutas de trabajo" icon="route" />
               <NavLink href="/config" label="Configuración" icon="settings" />
             </nav>
@@ -2090,7 +2192,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
 
 ### `app/tickets/page.tsx`
 
-Mesa de ayuda. `SlaCell` pinta el chip de SLA de cada fila. Cada `<td>` lleva `data-label` para el modo tarjeta en móvil. Los filtros se aplican en memoria sobre el resultado de `getTickets()`.
+Mesa de ayuda. Franja de aviso de SLA, `SlaCell` por fila, `data-label` en cada `<td>` para el modo tarjeta en móvil. Los filtros se aplican en memoria.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2157,6 +2259,14 @@ export default async function TicketsPage({ searchParams }: { searchParams: Reco
     } catch (e) {}
   }
 
+  // Aviso de SLA. Se calcula sobre TODOS los tickets, no sobre los filtrados:
+  // es una alerta global, no debe cambiar segun lo que estes mirando.
+  // Reutiliza los tickets ya cargados, sin consulta extra.
+  const vencidos = tickets.filter((t) => {
+    const s = slaInfo(t.created_at, t.resolved_at, t.status, t.cat_sla ?? 24, t.priority || "Baja");
+    return !s.closed && !s.onTime;
+  }).length;
+
   return (
     <>
       <div className="topbar">
@@ -2171,6 +2281,19 @@ export default async function TicketsPage({ searchParams }: { searchParams: Reco
       </div>
 
       <div className="content">
+        {vencidos > 0 && (
+          <a href="/tickets?status=abiertos" className="alert-bar">
+            <span className="ab-ic" aria-hidden="true">!</span>
+            <span className="ab-txt">
+              <b>{vencidos}</b>{" "}
+              {vencidos === 1
+                ? "ticket abierto está fuera de SLA"
+                : "tickets abiertos están fuera de SLA"}
+            </span>
+            <span className="ab-cta">Ver abiertos →</span>
+          </a>
+        )}
+
         <Filters companies={companies} categories={categories} collaborators={collaborators} count={rows.length} />
 
         {rows.length === 0 ? (
@@ -2221,7 +2344,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: Reco
 
 ### `app/rutas/page.tsx`
 
-Rutas de trabajo. Agrupa las iniciativas por empresa y delega el título en `<InitiativeTitle>` y el checklist en `<TaskList>`.
+Rutas de trabajo. Agrupa por empresa y delega el título en `<InitiativeTitle>` y el checklist en `<TaskList>`.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2325,7 +2448,7 @@ export default async function RutasPage({ searchParams }: { searchParams: Record
 
 ### `app/config/page.tsx`
 
-Configuración. Cuatro bloques CRUD; los formularios se enlazan directo a las Server Actions, sin JavaScript de cliente.
+Configuración. Cuatro bloques CRUD enlazados directo a las Server Actions, sin JavaScript de cliente.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2555,6 +2678,45 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 .navlink:hover { background: var(--surface-2); color: var(--ink); }
 .navlink.active { background: var(--accent-wash); color: var(--accent-ink); font-weight: 600; }
 .navlink .ic { width: 17px; height: 17px; opacity: .85; }
+
+/* Insignia de avisos de SLA en el menu */
+.nav-badge {
+  margin-left: auto; flex-shrink: 0;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+  font-variant-numeric: tabular-nums; line-height: 1;
+  min-width: 19px; height: 19px; padding: 0 6px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.nav-badge.crit { background: var(--crit); color: #0A0E15; }
+.nav-badge.warn { background: var(--high); color: #0A0E15; }
+
+/* Texto solo para lectores de pantalla */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Franja de aviso sobre la bandeja de tickets */
+.alert-bar {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 14px; margin-bottom: 14px;
+  border: 1px solid var(--crit); border-left-width: 3px;
+  background: var(--crit-w); border-radius: var(--radius-sm);
+  font-size: 13.5px; color: var(--ink-soft);
+}
+.alert-bar:hover { background: #38201a; }
+.alert-bar .ab-ic {
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--crit); color: #0A0E15;
+  display: grid; place-items: center;
+  font-family: var(--font-mono); font-weight: 700; font-size: 12px;
+}
+.alert-bar .ab-txt { flex: 1; min-width: 0; }
+.alert-bar .ab-txt b { color: var(--crit); font-variant-numeric: tabular-nums; }
+.alert-bar .ab-cta {
+  flex-shrink: 0; font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--crit); white-space: nowrap;
+}
 .sidebar .spacer { flex: 1; }
 .side-foot { font-size: 11px; color: var(--faint); font-family: var(--font-mono); padding: 10px; border-top: 1px solid var(--line); }
 
@@ -2918,6 +3080,8 @@ code { font-family: var(--font-mono); font-size: 12.5px; background: var(--surfa
   .brand { padding: 0; }
   .sidebar-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
   .navlink { justify-content: center; padding: 9px 6px; font-size: 12px; gap: 7px; }
+  /* con el nav centrado, la insignia no debe empujarse a la derecha */
+  .nav-badge { margin-left: 0; }
 }
 
 /* ---------- <= 760px: tablet estrecha y movil ---------- */
@@ -2935,6 +3099,11 @@ code { font-family: var(--font-mono); font-size: 12.5px; background: var(--surfa
   .stat-card .sc-ic svg { width: 16px; height: 16px; }
   .stat-card .sc-v { font-size: 1.45rem; }
   .panel { padding: 15px 16px; }
+
+  /* Franja de aviso: el enlace baja a su propia linea */
+  .alert-bar { flex-wrap: wrap; row-gap: 6px; }
+  .alert-bar .ab-txt { flex: 1 1 auto; }
+  .alert-bar .ab-cta { flex: 1 1 100%; text-align: right; }
 
   /* Filtros: dos por fila */
   .filters { gap: 8px; }
@@ -3022,7 +3191,7 @@ code { font-family: var(--font-mono); font-size: 12.5px; background: var(--surfa
 
 ### `components/NavLink.tsx`
 
-Enlace de la barra lateral. Iconos SVG en línea; marca activo con `usePathname()`.
+Enlace del menú lateral: icono, estado activo e **insignia de avisos de SLA** (roja para vencidos, ámbar para próximos a vencer).
 
 ```tsx
 "use client";
@@ -3057,13 +3226,35 @@ const icons: Record<string, React.ReactNode> = {
   ),
 };
 
-export function NavLink({ href, label, icon }: { href: string; label: string; icon: string }) {
+export function NavLink({
+  href, label, icon, badge = 0, badgeWarn = 0,
+}: {
+  href: string; label: string; icon: string;
+  /** Vencidos: insignia roja. Tiene prioridad sobre badgeWarn. */
+  badge?: number;
+  /** Por vencer en <2h: insignia ambar. Solo si no hay vencidos. */
+  badgeWarn?: number;
+}) {
   const pathname = usePathname();
   const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+
+  const alerta =
+    badge > 0
+      ? { n: badge, tipo: "crit", texto: `${badge} fuera de SLA` }
+      : badgeWarn > 0
+      ? { n: badgeWarn, tipo: "warn", texto: `${badgeWarn} por vencer` }
+      : null;
+
   return (
     <Link href={href} className={"navlink" + (active ? " active" : "")}>
       {icons[icon]}
       {label}
+      {alerta && (
+        <span className={"nav-badge " + alerta.tipo} title={alerta.texto}>
+          {alerta.n}
+          <span className="sr-only"> {alerta.texto}</span>
+        </span>
+      )}
     </Link>
   );
 }
@@ -3610,7 +3801,7 @@ export function StatusControl({ id, status }: { id: number; status: string }) {
 
 ### `components/RequesterControl.tsx`
 
-Select de solicitante; conserva como opción extra a un solicitante que ya no esté en la lista.
+Select de solicitante; conserva como opción a un solicitante que ya no esté en la lista.
 
 ```tsx
 "use client";
@@ -3854,7 +4045,7 @@ export function InitiativeStatusControl({ id, status }: { id: number; status: st
 
 ### `components/InitiativeTitle.tsx`
 
-**Título de ruta editable en línea.** Mismo patrón que `TaskItem`: Enter confirma, Escape revierte, guarda al perder el foco.
+**Título de ruta editable en línea.** Enter confirma, Escape revierte, guarda al perder el foco.
 
 ```tsx
 "use client";
@@ -3920,7 +4111,7 @@ export function DeleteInitiativeButton({ id }: { id: number }) {
 
 ### `components/TaskList.tsx`
 
-Envuelve las tareas. Arrastrar-soltar en escritorio y **botones ▲▼ en móvil**, porque la API de arrastre de HTML5 no responde al tacto. Ambos usan `persist()`.
+Arrastrar-soltar en escritorio y **botones ▲▼ en móvil**, porque la API de arrastre de HTML5 no responde al tacto. Ambos usan `persist()`.
 
 ```tsx
 "use client";
@@ -4086,35 +4277,6 @@ export function AddTaskForm({ initiativeId }: { initiativeId: number }) {
     >
       <input type="hidden" name="initiative_id" value={initiativeId} />
       <input type="text" name="title" placeholder="+ Agregar tarea" autoComplete="off" />
-    </form>
-  );
-}
-```
-
-### `components/TaskToggle.tsx`
-
-⚠️ **ARCHIVO HUÉRFANO.** Versión antigua de la tarea. Lo sustituyeron `TaskItem` + `TaskList`; nadie lo importa y se puede borrar. Se incluye solo para que el inventario esté completo.
-
-```tsx
-"use client";
-
-import { useRef } from "react";
-import { toggleTask } from "@/app/actions";
-
-export function TaskToggle({ id, done, title }: { id: number; done: boolean; title: string }) {
-  const ref = useRef<HTMLFormElement>(null);
-  return (
-    <form ref={ref} action={toggleTask} className="task-row">
-      <input type="hidden" name="id" value={id} />
-      <label className={"task-check" + (done ? " done" : "")}>
-        <input
-          type="checkbox"
-          defaultChecked={done}
-          onChange={() => ref.current?.requestSubmit()}
-        />
-        <span className="box" aria-hidden="true" />
-        <span className="task-title">{title}</span>
-      </label>
     </form>
   );
 }
