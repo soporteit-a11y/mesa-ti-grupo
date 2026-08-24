@@ -4,11 +4,16 @@
 > Si lo pegas en cualquier otro LLM/IA (ChatGPT, Gemini, Copilot, otro Claude, etc.), esa IA
 > tiene aquí **todo** lo necesario para entender el sistema y reconstruirlo idéntico desde cero:
 > contexto de negocio, decisiones de arquitectura, esquema de base de datos, el código fuente
-> íntegro de los 33 archivos, el sistema de diseño, el procedimiento de despliegue y las trampas
+> íntegro de los 35 archivos, el sistema de diseño, el procedimiento de despliegue y las trampas
 > ya descubiertas.
 >
 > **Fecha del traspaso:** 24 de agosto de 2026
+> **Última actualización:** 24 de agosto de 2026 — títulos de rutas editables, diseño responsive,
+> repositorio git inicializado. Ver el registro de cambios en §14.
 > **Estado:** en producción y en uso real.
+>
+> **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
+> el código y no actualizas esto, el traspaso deja de servir.
 
 ---
 
@@ -368,8 +373,31 @@ Todos los colores son variables CSS declaradas una sola vez en `:root` de `app/g
 
 - Barra lateral fija de `244px` (`--sidebar-w`), contenido con `max-width: 1320px`.
 - Radios: `--radius: 12px` en tarjetas, `--radius-sm: 7px` en campos.
-- Puntos de quiebre existentes: `1080px` y `720px` (dashboard), `980px` y `680px` (grillas),
-  `820px` (barra lateral pasa a horizontal).
+
+### Sistema responsive
+
+Las reglas responsive están **agrupadas al final de `app/globals.css`**, bajo el encabezado
+`RESPONSIVE`. Es a propósito: tienen la misma especificidad que las de escritorio, así que ganan
+por orden de aparición. Si añades reglas responsive, ponlas ahí, no dispersas.
+
+| Punto de quiebre | Qué cambia |
+|---|---|
+| `1080px` | Dashboard pasa de 3 a 2 columnas |
+| `980px` | Grillas `g4`→2 columnas, `g3`→1 columna |
+| `820px` | **La barra lateral pasa a cabecera horizontal**; el nav se vuelve una grilla de 4 |
+| `760px` | **La tabla de tickets se convierte en tarjetas apiladas**; filtros a 2 por fila; KPIs en 2×2; en rutas se ocultan los tiradores de arrastre y aparecen los botones ▲▼ |
+| `720px` | Dashboard a 1 columna |
+| `640px` | Diálogos casi a pantalla completa; `row2` a 1 columna |
+| `560px` | Nav a 2 columnas; acciones de ruta a línea propia |
+| `420px` | KPIs y filtros a 1 columna |
+
+Dos detalles de implementación que conviene conocer:
+
+1. **La tabla de tickets en móvil** no usa un componente distinto: cada `<td>` lleva un atributo
+   `data-label` y el CSS lo pinta con `content: attr(data-label)` en un `::before`. Si añades una
+   columna a la tabla, **tienes que añadirle su `data-label`** o en móvil saldrá sin etiqueta.
+2. **`app/layout.tsx` exporta `viewport`** (`width=device-width, initialScale=1`). Sin eso el móvil
+   renderiza a ancho de escritorio y nada de lo anterior surte efecto.
 
 ---
 
@@ -381,10 +409,11 @@ helpdesk/
 ├── next.config.mjs           # ignora errores de TS y ESLint en build
 ├── tsconfig.json             # alias "@/*" → raíz del proyecto
 ├── next-env.d.ts
+├── .gitignore                # excluye node_modules, .next, .env, .vercel
 ├── HANDOFF.md                # este documento
 │
 ├── app/
-│   ├── layout.tsx            # shell: barra lateral + <main>
+│   ├── layout.tsx            # shell: barra lateral + <main>; exporta metadata y viewport
 │   ├── globals.css           # TODO el CSS del proyecto (379 líneas)
 │   ├── actions.ts            # TODAS las Server Actions (23 funciones)
 │   ├── page.tsx              # Dashboard
@@ -412,14 +441,15 @@ helpdesk/
     ├── SlaInput.tsx                # input numérico de horas de SLA (guarda al perder foco)
     ├── NewInitiativeDialog.tsx     # diálogo de alta de ruta
     ├── InitiativeStatusControl.tsx # select de estado de ruta
+    ├── InitiativeTitle.tsx         # título de ruta editable en línea
     ├── DeleteInitiativeButton.tsx  # botón ✕ para borrar una ruta completa
-    ├── TaskList.tsx                # lista de tareas con arrastrar-soltar
+    ├── TaskList.tsx                # lista de tareas: arrastrar-soltar + botones ▲▼ en móvil
     ├── TaskItem.tsx                # tarea: casilla + título editable + borrar
     ├── AddTaskForm.tsx             # input "+ Agregar tarea"
     └── TaskToggle.tsx              # ⚠️ HUÉRFANO — ya nadie lo importa, se puede borrar
 ```
 
-**33 archivos** sin contar `node_modules`, `.next` ni `package-lock.json`.
+**35 archivos** sin contar `node_modules`, `.next` ni `package-lock.json`.
 
 ---
 
@@ -442,12 +472,48 @@ Antes de cualquier despliegue, siempre:
 npm run build
 ```
 
-### Despliegue a producción
+### Despliegue a producción — vía git (recomendada)
 
-El despliegue se hace subiendo el árbol de archivos a Vercel (proyecto `mesa-ti-grupo`,
-objetivo `production`).
+El proyecto tiene un repositorio git propio (`git init` hecho el 24-ago-2026, commit inicial
+`c381bd1`, 37 archivos versionados). **Esta es la vía que debe usarse.**
 
-> ### ⚠️ TRAMPA CRÍTICA — leer antes de desplegar
+Falta un paso único que debe hacer el propietario de la cuenta: crear el repositorio remoto en
+GitHub y enlazarlo a Vercel. Una vez hecho, todo despliegue es simplemente:
+
+```bash
+git add -A
+git commit -m "descripción del cambio"
+git push
+```
+
+Vercel construye y publica solo, en cada push a la rama de producción.
+
+Para dejarlo montado (una sola vez):
+
+```bash
+# 1. Crear un repositorio PRIVADO vacío en github.com (sin README ni .gitignore)
+# 2. Enlazarlo y subir:
+git remote add origin https://github.com/TU-USUARIO/mesa-ti-grupo.git
+git branch -M main
+git push -u origin main
+# 3. En Vercel: proyecto mesa-ti-grupo → Settings → Git → Connect Git Repository
+```
+
+**Que sea privado importa:** el repositorio no contiene credenciales (`.gitignore` excluye `.env`),
+pero sí todos los tickets sembrados y los nombres reales de colaboradores del grupo.
+
+### Despliegue a producción — vía árbol de archivos (alternativa)
+
+Mientras no exista el remoto de git, el despliegue se hace subiendo el árbol completo de archivos
+a Vercel (proyecto `mesa-ti-grupo`, objetivo `production`).
+
+> **Limitación práctica descubierta el 24-ago-2026:** el proyecto ya creció lo suficiente
+> (~120 KB de código fuente) como para que enviar el árbol completo en una sola operación choque
+> con el límite de salida de un asistente de IA. Es decir: **este método ya no es viable de forma
+> fiable por IA**, y por eso el paso a git dejó de ser opcional. Un humano con la CLI de Vercel
+> (`vercel --prod`) no tiene este problema.
+
+> ### ⚠️ TRAMPA CRÍTICA — leer antes de desplegar por árbol de archivos
 >
 > **Hay que enviar el árbol de archivos COMPLETO en cada despliegue.** El despliegue no es
 > incremental: lo que subes *es* el proyecto entero, no un parche sobre lo anterior.
@@ -532,9 +598,18 @@ Iniciativas agrupadas por empresa, en tarjetas de dos columnas. Cada tarjeta tie
 responsable, select de estado, botón ✕ para eliminarla, barra de avance (tareas hechas / totales)
 y su checklist.
 
-Cada tarea permite: marcar/desmarcar, **editar el título en línea** (Enter confirma, Escape
-revierte, vacío revierte), **borrar** (con confirmación) y **reordenar arrastrando** por el
-tirador `⠿`. El reordenamiento es optimista en el cliente y se persiste con `reorderTasks`.
+El **título de la ruta es editable en línea** (`InitiativeTitle`): se ve como texto normal, se
+subraya al pasar el ratón y se convierte en campo al hacer clic. Enter confirma, Escape revierte,
+vacío revierte. Guarda al perder el foco vía `updateInitiativeTitle`.
+
+Cada tarea permite: marcar/desmarcar, **editar el título en línea** (mismo comportamiento),
+**borrar** (con confirmación) y **reordenar**. El reordenamiento es optimista en el cliente y se
+persiste con `reorderTasks`, que reescribe la columna `position` de forma secuencial.
+
+**Reordenar tiene dos mecanismos según el dispositivo**, y esto es deliberado: en escritorio se
+arrastra por el tirador `⠿`; en pantallas de ≤760 px ese tirador se oculta y aparecen botones ▲▼.
+La razón es que **la API de arrastrar-soltar de HTML5 no funciona con eventos táctiles** — sin los
+botones, reordenar sería imposible en móvil. Ambos caminos llaman a la misma función `persist()`.
 
 ### Configuración (`/config`)
 
@@ -549,34 +624,48 @@ asociadas — `deleteCompany` cuenta las tres cosas y sale sin hacer nada si enc
 
 ## 12. Trabajo pendiente
 
-Tres peticiones del usuario quedaron sin implementar cuando se redactó este traspaso:
+### Bloqueado — requiere acción del propietario
 
-1. **Títulos de las rutas editables.** Hoy el título de una iniciativa (`initiatives.title`) solo
-   se puede fijar al crearla. Falta hacerlo editable en línea, igual que ya se hizo con los títulos
-   de tarea. Es directo: replicar el patrón de `TaskItem` con una acción nueva `updateInitiativeTitle`.
+**Crear el repositorio remoto en GitHub y enlazarlo a Vercel** (§10). Es el desbloqueo más
+importante: sin él, cada despliegue depende del método por árbol de archivos, que ya no es fiable
+al tamaño actual del proyecto. Son unos 5 minutos.
 
-2. **Hacer la página responsive.** Existen algunos `@media` (§8), pero no se ha revisado en móvil
-   de verdad. Los puntos flojos conocidos: la tabla de tickets fuerza `min-width: 820px` y se
-   desborda; la grilla de configuración `g3` colapsa a una sola columna solo por debajo de 980 px;
-   los diálogos tienen `max-width` fijo; la barra lateral pasa a horizontal a 820 px pero no se ha
-   probado con el menú completo.
+### Análisis pendiente — alertas y notificaciones
 
-3. **Alertas y notificaciones** (pregunta abierta del usuario, aún sin responder). Quiere saber si
-   se pueden añadir avisos para tickets y rutas. Respuesta corta: **sí, y hay tres niveles**:
-   - *Dentro de la app* (lo más sencillo): campanita con contador de tickets vencidos o por vencer;
-     no requiere infraestructura nueva, es una consulta más.
-   - *Por correo*: Vercel Cron Job (`vercel.json`) que dispara un endpoint diario, y Resend
-     (plan gratuito) para enviar. Requiere una API key nueva.
-   - *En tiempo real* (WebSockets/push): desproporcionado para un solo usuario; no recomendado.
-   Nota de viabilidad: el plan Hobby de Vercel permite **cron jobs solo con frecuencia diaria**.
+El usuario preguntó si se pueden añadir avisos para tickets y rutas. **Sí se puede.** Tres niveles,
+de menor a mayor coste:
 
-**Limpieza pendiente:** borrar `components/TaskToggle.tsx`, que quedó huérfano al sustituirlo por
-`TaskItem` + `TaskList`.
+**Nivel 1 — Avisos dentro de la aplicación.** Un contador en el menú lateral junto a "Mesa de ayuda"
+con los tickets vencidos o por vencer, y una franja de aviso arriba de la bandeja. No necesita
+infraestructura nueva: la consulta ya existe en la práctica, es la misma expresión SQL que alimenta
+el KPI "Fuera de SLA" (§5.6). Coste: gratis, ~1 hora. Limitación: solo se ve al abrir la página.
 
-**Limitación de fondo, no planteada aún por el usuario:** el sitio **no tiene autenticación**.
-Cualquiera con la URL puede leer y modificar todo. Si algún día lo usan más personas del grupo,
-esto hay que resolverlo antes (Vercel Password Protection es de pago; alternativas gratuitas:
-Auth.js, o middleware con Basic Auth).
+**Nivel 2 — Resumen diario por correo.** Un Vercel Cron Job definido en `vercel.json` que llame a
+un endpoint (`/api/cron/alertas`) y envíe el correo con Resend (capa gratuita: 3.000 correos/mes).
+Coste: gratis, ~3 horas, requiere dar de alta una API key de Resend. **Limitación real e importante:
+el plan Hobby de Vercel solo permite cron con frecuencia diaria** — para avisos por hora hace falta
+el plan Pro (20 USD/mes).
+
+**Nivel 3 — Tiempo real (WebSockets o push del navegador).** Desproporcionado para un sistema de un
+solo usuario. No recomendado.
+
+**Observación importante sobre las rutas de trabajo:** hoy **no se les puede poner alerta por fecha**,
+porque la tabla `initiatives` no tiene ninguna columna de vencimiento. Para avisar de rutas atrasadas
+habría que añadir antes un `due_date`, o bien basar el aviso en inactividad (por ejemplo, "ninguna
+tarea completada en 30 días"), que sí se puede calcular con los datos actuales.
+
+Recomendación: empezar por el Nivel 1, que cubre el 80 % del valor sin coste ni dependencias nuevas.
+
+### Limpieza pendiente
+
+Borrar `components/TaskToggle.tsx`, huérfano desde que lo sustituyeron `TaskItem` + `TaskList`.
+
+### Limitación de fondo, no planteada aún por el usuario
+
+El sitio **no tiene autenticación**. Cualquiera con la URL puede leer y modificar todo. Hoy es
+tolerable porque lo usa una sola persona y la URL no está publicada, pero si algún día entra más
+gente del grupo hay que resolverlo antes. Vercel Password Protection es de pago; alternativas
+gratuitas: Auth.js, o un middleware con Basic Auth.
 
 ---
 
@@ -603,16 +692,84 @@ siga siendo coherente:
 
 ---
 
-## 14. Código fuente completo
-
-Todo lo que sigue es el contenido íntegro y literal de los archivos del proyecto, tal como están
-en producción a la fecha de este traspaso. Con esto y las secciones anteriores, el proyecto se
-reconstruye desde cero sin necesitar nada más.
-
 
 ---
 
-## 14.1 Configuración del proyecto
+## 14. Registro de cambios
+
+Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
+al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 24 de agosto de 2026 — Títulos editables, responsive y repositorio git
+
+**1. Títulos de las rutas editables** *(petición del usuario)*
+- Nuevo componente `components/InitiativeTitle.tsx`, con el mismo patrón de edición en línea
+  que `TaskItem`: Enter confirma, Escape revierte, vacío revierte, guarda al perder el foco.
+- Nueva Server Action `updateInitiativeTitle` en `app/actions.ts`.
+- `app/rutas/page.tsx`: el `<div className="init-title">` estático se sustituye por el
+  componente; el contenedor pasa a `.init-head` para poder encoger sin romper la fila.
+- CSS: `.init-head`, `.init-title-form`, `.init-title-input` con estados hover y focus.
+
+**2. Diseño responsive completo** *(petición del usuario)*
+- `app/layout.tsx`: se exporta `viewport` (`width=device-width`, `initialScale: 1`,
+  `themeColor`). **Sin esto nada de lo demás funciona en móvil.**
+- `app/layout.tsx`: los cuatro enlaces se envuelven en `<nav className="sidebar-nav">` para
+  poder reorganizarlos como grilla en pantallas pequeñas.
+- `app/tickets/page.tsx`: cada `<td>` recibe un atributo `data-label`, que alimenta las
+  etiquetas del modo tarjeta en móvil.
+- `app/globals.css`: bloque `RESPONSIVE` nuevo al final del archivo, con 7 puntos de quiebre
+  (§8). Lo más notable: la tabla de tickets se convierte en tarjetas apiladas por debajo de
+  760 px, y la barra lateral pasa a cabecera horizontal por debajo de 820 px.
+- `components/TaskList.tsx`: función `move(index, dir)` y botones ▲▼, porque **arrastrar y
+  soltar de HTML5 no funciona en pantallas táctiles**. Los botones solo se ven en móvil; el
+  tirador de arrastre se oculta ahí. Ambos caminos reutilizan `persist()`.
+
+**3. Alertas y notificaciones** *(pregunta del usuario)*
+- No se implementó nada: era una consulta de viabilidad. El análisis completo, con costes,
+  límites del plan Hobby y la carencia de `due_date` en `initiatives`, está en §12.
+
+**4. Repositorio git** *(consecuencia de un límite encontrado al desplegar)*
+- `git init` propio dentro de `helpdesk/`, con `.gitignore` que excluye `node_modules`,
+  `.next`, `.env*` y `.vercel`. Commit inicial `c381bd1`, 37 archivos.
+- Motivo: al intentar desplegar por árbol de archivos se descubrió que el proyecto ya supera
+  el volumen que una IA puede enviar en una sola operación (§10). El despliegue por git deja
+  de ser una mejora opcional y pasa a ser la vía necesaria.
+- **Nota:** antes de esto, la carpeta del proyecto quedaba dentro de un repositorio git
+  accidental que abarcaba todo `C:\Users\Diomelvis` (incluido `.ssh`). El repositorio nuevo es
+  independiente; conviene revisar y eliminar aquel repositorio accidental del directorio de
+  usuario.
+
+### Antes del 24 de agosto de 2026
+
+Historial reconstruido a partir del estado del código; las fechas exactas no quedaron registradas.
+
+- Sistema inicial: dashboard, mesa de ayuda y rutas de trabajo, con tema oscuro y datos de ejemplo.
+- Importación de 68 tickets reales desde un CSV de Zoho Desk, sustituyendo los de ejemplo
+  (protegido por la clave `tickets_seed` de la tabla `meta`).
+- Página de configuración: empresas, categorías y colaboradores pasan a ser editables desde la
+  interfaz en lugar de estar en el código.
+- Diálogo de detalle de ticket: edición completa después de crearlo, más hilo de comentarios
+  (antes el comentario inicial se capturaba al crear y ya no era accesible).
+- Filtro por rango de fechas en el dashboard.
+- Corrección del centrado del texto en las donas (dos intentos; la solución buena es flexbox
+  superpuesto, no coordenadas SVG).
+- SLA configurable por categoría con multiplicador por prioridad, chip por ticket y KPI
+  "Fuera de SLA" en el dashboard.
+- Respuestas rápidas: tabla propia, CRUD en configuración e inserción con un clic al comentar.
+- Tareas de rutas editables y eliminables (antes solo se podían marcar).
+- Reordenar tareas arrastrando y eliminar rutas completas.
+
+---
+
+## 15. Código fuente completo
+
+Todo lo que sigue es el contenido íntegro y literal de los archivos del proyecto, tal como están
+en producción a la fecha de la última actualización. Con esto y las secciones anteriores, el
+proyecto se reconstruye desde cero sin necesitar nada más.
+
+---
+
+## 15.1 Configuración del proyecto
 
 ### `package.json`
 
@@ -697,9 +854,36 @@ Generado por Next.js. No editar.
 // see https://nextjs.org/docs/app/building-your-application/configuring/typescript for more information.
 ```
 
+### `.gitignore`
+
+Excluye dependencias, artefactos de build y **las variables de entorno** — la cadena de Postgres nunca debe llegar al repositorio.
+
+```text
+# dependencias
+/node_modules
+
+# build de Next.js
+/.next
+/out
+
+# variables de entorno (NUNCA subir: contienen la cadena de Postgres)
+.env
+.env.local
+.env*.local
+
+# Vercel
+.vercel
+
+# sistema
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+```
+
 ---
 
-## 14.2 Capa de datos (`lib/`)
+## 15.2 Capa de datos (`lib/`)
 
 ### `lib/db.ts`
 
@@ -1238,7 +1422,7 @@ export async function getInitiativeSummary() {
 
 ### `lib/priority.ts`
 
-Constantes compartidas (estados, prioridades, etiquetas) y el cálculo de SLA en TypeScript: `PRIORITY_SLA_MULT`, `slaInfo()` y `fmtSlaHours()`. Las constantes `PRIORITIES`/`PRIORITY_META`/`computeScore`/`levelFor`/`slaForLevel` son del modelo P1–P4 antiguo y ya no se usan.
+Constantes compartidas y el cálculo de SLA en TypeScript: `PRIORITY_SLA_MULT`, `slaInfo()` y `fmtSlaHours()`. Las constantes `PRIORITIES`/`PRIORITY_META`/`computeScore`/`levelFor`/`slaForLevel` son del modelo P1–P4 antiguo y ya no se usan.
 
 ```ts
 // Modelo de priorización — mismo criterio que el playbook del grupo.
@@ -1347,11 +1531,11 @@ export function fmtSlaHours(h: number): string {
 
 ---
 
-## 14.3 Server Actions
+## 15.3 Server Actions
 
 ### `app/actions.ts`
 
-Las 23 mutaciones del sistema, todas con el patrón de cinco pasos. Agrupadas por área: tickets, configuración, respuestas rápidas y rutas de trabajo.
+Las 24 mutaciones del sistema, todas con el patrón de cinco pasos. Agrupadas por área: tickets, configuración, respuestas rápidas y rutas de trabajo.
 
 ```ts
 "use server";
@@ -1606,6 +1790,16 @@ export async function setInitiativeStatus(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function updateInitiativeTitle(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const title = String(formData.get("title") || "").trim();
+  if (!id || !title) return;
+  await sql!`UPDATE initiatives SET title = ${title} WHERE id = ${id}`;
+  revalidatePath("/rutas");
+  revalidatePath("/");
+}
+
 export async function deleteInitiative(formData: FormData) {
   await ensureSchema();
   const id = Number(formData.get("id"));
@@ -1629,20 +1823,26 @@ export async function reorderTasks(formData: FormData) {
 
 ---
 
-## 14.4 Páginas y layout (`app/`)
+## 15.4 Páginas y layout (`app/`)
 
 ### `app/layout.tsx`
 
-Shell de la aplicación: barra lateral con los cuatro enlaces y `<main>`.
+Shell de la aplicación. Exporta `metadata` y **`viewport`** (imprescindible para el responsive) y envuelve los enlaces en `<nav className="sidebar-nav">`.
 
 ```tsx
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { NavLink } from "@/components/NavLink";
 
 export const metadata: Metadata = {
   title: "Mesa de Servicios TI — Grupo Empresarial",
   description: "Sistema de tickets y priorización para Droppett, Gilligan, CMG y Shazam.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0A0E15",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -1659,10 +1859,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </div>
             <div className="nav-label">Operación</div>
-            <NavLink href="/" label="Dashboard" icon="grid" />
-            <NavLink href="/tickets" label="Mesa de ayuda" icon="inbox" />
-            <NavLink href="/rutas" label="Rutas de trabajo" icon="route" />
-            <NavLink href="/config" label="Configuración" icon="settings" />
+            <nav className="sidebar-nav">
+              <NavLink href="/" label="Dashboard" icon="grid" />
+              <NavLink href="/tickets" label="Mesa de ayuda" icon="inbox" />
+              <NavLink href="/rutas" label="Rutas de trabajo" icon="route" />
+              <NavLink href="/config" label="Configuración" icon="settings" />
+            </nav>
             <div className="spacer" />
             <div className="side-foot">
               Droppett · Gilligan<br />CMG · Shazam
@@ -1888,7 +2090,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
 
 ### `app/tickets/page.tsx`
 
-Mesa de ayuda. El componente `SlaCell` local pinta el chip de SLA de cada fila. Los filtros se aplican en memoria sobre el resultado de `getTickets()`.
+Mesa de ayuda. `SlaCell` pinta el chip de SLA de cada fila. Cada `<td>` lleva `data-label` para el modo tarjeta en móvil. Los filtros se aplican en memoria sobre el resultado de `getTickets()`.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -1992,15 +2194,15 @@ export default async function TicketsPage({ searchParams }: { searchParams: Reco
               <tbody>
                 {rows.map((t) => (
                   <tr key={t.id}>
-                    <td className="mono" style={{ color: "var(--muted)" }}>{t.id}</td>
-                    <td><TicketOpenLink id={t.id} title={t.title} /></td>
-                    <td><RequesterControl id={t.id} requester={t.requester} collaborators={collaborators} /></td>
-                    <td><span className="chip" style={{ background: t.company_color }}>{t.company}</span></td>
-                    <td className="cat-tag">{t.category || "Otros"}</td>
-                    <td><span className={"pri " + (t.priority || "Baja")}>{t.priority || "Baja"}</span></td>
-                    <td><SlaCell t={t} /></td>
-                    <td className="mono" style={{ color: "var(--muted)", whiteSpace: "nowrap" }}>{fmtDate(t.created_at)}</td>
-                    <td><StatusControl id={t.id} status={t.status} /></td>
+                    <td data-label="#" className="mono" style={{ color: "var(--muted)" }}>{t.id}</td>
+                    <td data-label="Asunto"><TicketOpenLink id={t.id} title={t.title} /></td>
+                    <td data-label="Solicitante"><RequesterControl id={t.id} requester={t.requester} collaborators={collaborators} /></td>
+                    <td data-label="Empresa"><span className="chip" style={{ background: t.company_color }}>{t.company}</span></td>
+                    <td data-label="Categoría" className="cat-tag">{t.category || "Otros"}</td>
+                    <td data-label="Prioridad"><span className={"pri " + (t.priority || "Baja")}>{t.priority || "Baja"}</span></td>
+                    <td data-label="SLA"><SlaCell t={t} /></td>
+                    <td data-label="Creado" className="mono" style={{ color: "var(--muted)", whiteSpace: "nowrap" }}>{fmtDate(t.created_at)}</td>
+                    <td data-label="Estado"><StatusControl id={t.id} status={t.status} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -2019,7 +2221,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: Reco
 
 ### `app/rutas/page.tsx`
 
-Rutas de trabajo. Agrupa las iniciativas por empresa en un objeto `groups` y delega el checklist en `<TaskList>`.
+Rutas de trabajo. Agrupa las iniciativas por empresa y delega el título en `<InitiativeTitle>` y el checklist en `<TaskList>`.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2029,6 +2231,7 @@ import { NewInitiativeDialog } from "@/components/NewInitiativeDialog";
 import { TaskList } from "@/components/TaskList";
 import { AddTaskForm } from "@/components/AddTaskForm";
 import { InitiativeStatusControl } from "@/components/InitiativeStatusControl";
+import { InitiativeTitle } from "@/components/InitiativeTitle";
 import { DeleteInitiativeButton } from "@/components/DeleteInitiativeButton";
 import { FiltersCompanyClient } from "@/components/FiltersCompanyClient";
 
@@ -2086,8 +2289,8 @@ export default async function RutasPage({ searchParams }: { searchParams: Record
                 {g.items.map((i) => (
                   <article className="card init-card" key={i.id}>
                     <div className="init-top">
-                      <div>
-                        <div className="init-title">{i.title}</div>
+                      <div className="init-head">
+                        <InitiativeTitle id={i.id} title={i.title} />
                         <div className="init-sub">
                           {i.area ? <span className="area-tag">{i.area}</span> : null}
                           {i.owner ? <span className="mono" style={{ color: "var(--muted)" }}> · {i.owner}</span> : null}
@@ -2286,11 +2489,11 @@ export default async function ConfigPage() {
 
 ---
 
-## 14.5 Hoja de estilos
+## 15.5 Hoja de estilos
 
 ### `app/globals.css`
 
-**Todo el CSS del proyecto en un solo archivo.** Las variables de `:root` son el sistema de diseño completo (§8).
+**Todo el CSS del proyecto en un solo archivo.** Las variables de `:root` son el sistema de diseño (§8) y el bloque `RESPONSIVE` del final contiene los 7 puntos de quiebre.
 
 ```css
 :root {
@@ -2605,6 +2808,17 @@ dialog::backdrop { background: rgba(3,6,10,.65); backdrop-filter: blur(2px); }
 .init-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .init-title { font-size: 1rem; font-weight: 680; letter-spacing: -.01em; }
 .init-sub { font-size: 12px; margin-top: 3px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
+/* Titulo de ruta editable en linea */
+.init-head { flex: 1; min-width: 0; }
+.init-title-form { margin: 0; }
+.init-title-input {
+  font-family: var(--font-sans); font-size: 1rem; font-weight: 680; letter-spacing: -.01em;
+  color: var(--ink); background: transparent; border: 1px solid transparent;
+  border-radius: 6px; padding: 3px 6px; margin: -3px -6px; width: calc(100% + 12px);
+}
+.init-title-input:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.init-title-input:focus { border-color: var(--accent); background: var(--surface-2); outline: none; }
 .area-tag { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .03em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent-wash); padding: 2px 7px; border-radius: 5px; }
 
 .init-status { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line-strong); color: var(--ink-soft); background: var(--surface-2); }
@@ -2672,15 +2886,143 @@ dialog::backdrop { background: rgba(3,6,10,.65); backdrop-filter: blur(2px); }
 .steps li b { color: var(--ink); }
 code { font-family: var(--font-mono); font-size: 12.5px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
 .callout { border-left: 3px solid var(--accent); background: var(--accent-wash); padding: 12px 15px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: 13.5px; color: var(--ink-soft); }
+
+/* ============================================================
+   RESPONSIVE
+   Las reglas viven al final del archivo a proposito: al tener la
+   misma especificidad que las de escritorio, ganan por orden.
+   Puntos de quiebre: 1080 / 980 / 820 / 760 / 640 / 560 / 420
+   ============================================================ */
+
+/* Nav lateral: contenedor propio para poder reorganizarlo en movil */
+.sidebar-nav { display: flex; flex-direction: column; gap: 6px; }
+
+/* Botones subir/bajar tarea: ocultos en escritorio (ahi se arrastra) */
+.task-move { display: none; flex-direction: column; gap: 1px; flex-shrink: 0; }
+.task-move button {
+  background: none; border: 1px solid var(--line-strong); color: var(--muted);
+  border-radius: 4px; cursor: pointer; font-size: 9px; line-height: 1;
+  padding: 3px 5px; min-height: 22px;
+}
+.task-move button:disabled { opacity: .3; cursor: default; }
+.task-move button:not(:disabled):hover { color: var(--accent-ink); border-color: var(--accent); }
+
+/* ---------- <= 820px: la barra lateral pasa a cabecera ---------- */
+@media (max-width: 820px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar {
+    position: static; height: auto; flex-direction: column; gap: 10px;
+    padding: 12px 14px; border-right: 0; border-bottom: 1px solid var(--line);
+  }
+  .sidebar .spacer, .side-foot, .nav-label { display: none; }
+  .brand { padding: 0; }
+  .sidebar-nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .navlink { justify-content: center; padding: 9px 6px; font-size: 12px; gap: 7px; }
+}
+
+/* ---------- <= 760px: tablet estrecha y movil ---------- */
+@media (max-width: 760px) {
+  .content { padding: 16px 14px 48px; }
+  .topbar { padding: 12px 14px; flex-wrap: wrap; gap: 12px; }
+  .topbar .push { margin-left: 0; width: 100%; }
+  .topbar .push .btn { flex: 1; justify-content: center; }
+
+  /* Cabecera del dashboard */
+  .report-head { gap: 16px; margin-bottom: 18px; }
+  .stat-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+  .stat-card { min-width: 0; padding: 12px 14px; gap: 11px; }
+  .stat-card .sc-ic { width: 34px; height: 34px; }
+  .stat-card .sc-ic svg { width: 16px; height: 16px; }
+  .stat-card .sc-v { font-size: 1.45rem; }
+  .panel { padding: 15px 16px; }
+
+  /* Filtros: dos por fila */
+  .filters { gap: 8px; }
+  .filters select { flex: 1 1 calc(50% - 4px); min-width: 0; }
+  .filters .fcount { flex: 1 1 100%; margin-left: 0; text-align: right; }
+
+  /* --- Tabla de tickets -> tarjetas apiladas --- */
+  .tickets-table { min-width: 0; }
+  .tickets-table thead { display: none; }
+  .tickets-table tbody tr { display: block; padding: 12px 14px; border-bottom: 1px solid var(--line-strong); }
+  .tickets-table tbody tr:last-child { border-bottom: 0; }
+  .tickets-table tbody tr:hover td { background: transparent; }
+  .tickets-table tbody td {
+    display: grid; grid-template-columns: 92px minmax(0, 1fr);
+    gap: 10px; align-items: center; padding: 4px 0; border-bottom: 0;
+  }
+  .tickets-table tbody td::before {
+    content: attr(data-label);
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  /* El asunto es el titulo de la tarjeta: sin etiqueta y a todo el ancho */
+  .tickets-table tbody td[data-label="Asunto"] { grid-template-columns: minmax(0, 1fr); padding: 0 0 8px; }
+  .tickets-table tbody td[data-label="Asunto"]::before { display: none; }
+  .tickets-table tbody td[data-label="Asunto"] .ticket-open { font-size: 15px; }
+  .req-select { width: 100%; min-width: 0; }
+
+  /* Rutas de trabajo */
+  .init-card { padding: 14px; }
+  .task-handle { display: none; }          /* arrastrar no funciona al tacto */
+  .task-move { display: flex; }            /* ...se reordena con botones */
+  .task-drag-row { gap: 6px; }
+  .task-title-input { border-color: var(--line); }
+
+  /* Configuracion */
+  .cfg-list { max-height: none; }
+  .cfg-add { flex-wrap: wrap; }
+  .cfg-add input[type=text] { flex: 1 1 100%; }
+  .cfg-add select { flex: 1 1 auto; }
+}
+
+/* ---------- <= 640px: dialogos a pantalla casi completa ---------- */
+@media (max-width: 640px) {
+  dialog { width: calc(100% - 20px); max-width: none; }
+  dialog.ticket-detail { max-width: none; }
+  .dialog-head, .dialog-foot { padding: 14px 16px; }
+  .dialog-body { padding: 16px; }
+  .dialog-foot { flex-direction: column; align-items: stretch; gap: 10px; }
+  .dialog-foot > div { display: flex; gap: 8px; }
+  .dialog-foot > div .btn { flex: 1; justify-content: center; }
+  .row2 { grid-template-columns: 1fr; }
+  .ticket-detail .dialog-body { max-height: 78vh; }
+  .collab-add { flex-direction: column; align-items: stretch; }
+  .collab-add select { width: 100%; }
+}
+
+/* ---------- <= 560px: movil ---------- */
+@media (max-width: 560px) {
+  .sidebar-nav { grid-template-columns: 1fr 1fr; }
+  .navlink { font-size: 13px; }
+  .report-head .rh-title { font-size: 1.35rem; }
+  .daterange { width: 100%; }
+  .daterange label { flex: 1; }
+  .daterange input[type=date] { width: 100%; }
+  .cfg-row { flex-wrap: wrap; row-gap: 6px; }
+  .cfg-edit { flex: 1 1 100%; }
+  .init-top { flex-wrap: wrap; row-gap: 10px; }
+  .init-actions { width: 100%; justify-content: flex-end; }
+  .tickets-table tbody td { grid-template-columns: 80px minmax(0, 1fr); gap: 8px; }
+}
+
+/* ---------- <= 420px: pantallas muy estrechas ---------- */
+@media (max-width: 420px) {
+  .content { padding: 14px 11px 40px; }
+  .stat-cards { grid-template-columns: 1fr; }
+  .filters select { flex: 1 1 100%; }
+  .daybars { gap: 5px; }
+  .daycol .dl { font-size: 10px; }
+}
 ```
 
 ---
 
-## 14.6 Componentes
+## 15.6 Componentes
 
 ### `components/NavLink.tsx`
 
-Enlace de la barra lateral. Los iconos son SVG en línea dentro del objeto `icons`; marca activo comparando con `usePathname()`.
+Enlace de la barra lateral. Iconos SVG en línea; marca activo con `usePathname()`.
 
 ```tsx
 "use client";
@@ -2729,7 +3071,7 @@ export function NavLink({ href, label, icon }: { href: string; label: string; ic
 
 ### `components/Setup.tsx`
 
-Pantalla que se muestra en las cuatro páginas cuando no hay base de datos conectada. Explica al usuario cómo conectarla él mismo desde Vercel.
+Pantalla que se muestra cuando no hay base de datos conectada.
 
 ```tsx
 export function Setup() {
@@ -2880,7 +3222,7 @@ export function Filters({ companies, categories, collaborators, count }: { compa
 
 ### `components/FiltersCompanyClient.tsx`
 
-Filtro de empresa de `/rutas` (versión reducida del anterior).
+Filtro de empresa de `/rutas`.
 
 ```tsx
 "use client";
@@ -2912,7 +3254,7 @@ export function FiltersCompanyClient({ companies }: { companies: any[] }) {
 
 ### `components/NewTicketDialog.tsx`
 
-Diálogo de alta de ticket. Une las categorías de la base con las de `TICKET_CATEGORIES` para no quedarse nunca sin opciones.
+Diálogo de alta de ticket.
 
 ```tsx
 "use client";
@@ -3009,7 +3351,7 @@ export function NewTicketDialog({ companies, categories, collaborators }: { comp
 
 ### `components/TicketOpenLink.tsx`
 
-Convierte el asunto del ticket en un botón que añade `?ticket=N` a la URL.
+Convierte el asunto en un botón que añade `?ticket=N` a la URL.
 
 ```tsx
 "use client";
@@ -3037,7 +3379,7 @@ export function TicketOpenLink({ id, title }: { id: number; title: string }) {
 
 ### `components/TicketDetailDialog.tsx`
 
-Diálogo de detalle: edición completa, insignia de SLA (`SlaBadge`), hilo de comentarios e inserción de respuestas rápidas mediante `commentTextRef`.
+Diálogo de detalle: edición, `SlaBadge`, comentarios y respuestas rápidas vía `commentTextRef`.
 
 ```tsx
 "use client";
@@ -3234,7 +3576,7 @@ export function TicketDetailDialog({
 
 ### `components/StatusControl.tsx`
 
-Select de estado de ticket que se auto-envía al cambiar.
+Select de estado de ticket que se auto-envía.
 
 ```tsx
 "use client";
@@ -3268,7 +3610,7 @@ export function StatusControl({ id, status }: { id: number; status: string }) {
 
 ### `components/RequesterControl.tsx`
 
-Select de solicitante. Si el ticket tiene un solicitante que ya no está en la lista de colaboradores, lo añade como opción extra para no perder el dato.
+Select de solicitante; conserva como opción extra a un solicitante que ya no esté en la lista.
 
 ```tsx
 "use client";
@@ -3306,7 +3648,7 @@ export function RequesterControl({ id, requester, collaborators }: { id: number;
 
 ### `components/CollaboratorsDialog.tsx`
 
-Alta rápida de colaboradores desde la cabecera de `/tickets`.
+Alta rápida de colaboradores desde `/tickets`.
 
 ```tsx
 "use client";
@@ -3376,7 +3718,7 @@ export function CollaboratorsDialog({ collaborators, companies }: { collaborator
 
 ### `components/SlaInput.tsx`
 
-Input numérico de horas de SLA por categoría. Guarda al perder el foco.
+Horas de SLA por categoría. Guarda al perder el foco.
 
 ```tsx
 "use client";
@@ -3405,7 +3747,7 @@ export function SlaInput({ id, hours }: { id: number; hours: number | null }) {
 
 ### `components/NewInitiativeDialog.tsx`
 
-Diálogo de alta de ruta. El textarea de tareas se parte por saltos de línea y crea una tarea por línea.
+Diálogo de alta de ruta; el textarea crea una tarea por línea.
 
 ```tsx
 "use client";
@@ -3510,9 +3852,47 @@ export function InitiativeStatusControl({ id, status }: { id: number; status: st
 }
 ```
 
+### `components/InitiativeTitle.tsx`
+
+**Título de ruta editable en línea.** Mismo patrón que `TaskItem`: Enter confirma, Escape revierte, guarda al perder el foco.
+
+```tsx
+"use client";
+
+import { useRef, useState } from "react";
+import { updateInitiativeTitle } from "@/app/actions";
+
+export function InitiativeTitle({ id, title }: { id: number; title: string }) {
+  const ref = useRef<HTMLFormElement>(null);
+  const [value, setValue] = useState(title);
+
+  return (
+    <form ref={ref} action={updateInitiativeTitle} className="init-title-form">
+      <input type="hidden" name="id" value={id} />
+      <input
+        type="text"
+        name="title"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => {
+          if (value.trim() && value !== title) ref.current?.requestSubmit();
+          else if (!value.trim()) setValue(title);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
+          if (e.key === "Escape") { setValue(title); (e.target as HTMLInputElement).blur(); }
+        }}
+        className="init-title-input"
+        title="Clic para editar el título de la ruta"
+      />
+    </form>
+  );
+}
+```
+
 ### `components/DeleteInitiativeButton.tsx`
 
-Botón ✕ que elimina una ruta completa (las tareas caen por `ON DELETE CASCADE`). Pide confirmación.
+Botón ✕ que elimina una ruta completa (las tareas caen por `ON DELETE CASCADE`).
 
 ```tsx
 "use client";
@@ -3540,7 +3920,7 @@ export function DeleteInitiativeButton({ id }: { id: number }) {
 
 ### `components/TaskList.tsx`
 
-Envuelve las tareas y gestiona el arrastrar-soltar con la API nativa de HTML5. Reordena de forma optimista en el cliente y persiste con `reorderTasks`. Se resincroniza con el servidor mediante `useEffect` sobre `tasks`.
+Envuelve las tareas. Arrastrar-soltar en escritorio y **botones ▲▼ en móvil**, porque la API de arrastre de HTML5 no responde al tacto. Ambos usan `persist()`.
 
 ```tsx
 "use client";
@@ -3565,6 +3945,17 @@ export function TaskList({ initiativeId, tasks }: { initiativeId: number; tasks:
     fd.set("initiative_id", String(initiativeId));
     fd.set("order", next.map((t) => t.id).join(","));
     reorderTasks(fd);
+  };
+
+  // El arrastrar-soltar de HTML5 no existe en pantallas tactiles:
+  // en movil se reordena con estos botones (ver .task-move en globals.css).
+  const move = (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= items.length) return;
+    const next = [...items];
+    [next[index], next[target]] = [next[target], next[index]];
+    setItems(next);
+    persist(next);
   };
 
   const onDrop = (index: number) => {
@@ -3599,6 +3990,10 @@ export function TaskList({ initiativeId, tasks }: { initiativeId: number; tasks:
           className={"task-drag-row" + (overIndex === i ? " over" : "")}
         >
           <span className="task-handle" aria-hidden="true" title="Arrastrar para reordenar">⠿</span>
+          <div className="task-move">
+            <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Subir tarea">▲</button>
+            <button type="button" onClick={() => move(i, 1)} disabled={i === items.length - 1} aria-label="Bajar tarea">▼</button>
+          </div>
           <TaskItem id={t.id} done={t.done} title={t.title} />
         </div>
       ))}
@@ -3609,7 +4004,7 @@ export function TaskList({ initiativeId, tasks }: { initiativeId: number; tasks:
 
 ### `components/TaskItem.tsx`
 
-Una tarea: casilla, título editable en línea (Enter confirma, Escape revierte) y botón de borrar que aparece al pasar el ratón.
+Una tarea: casilla, título editable en línea y botón de borrar.
 
 ```tsx
 "use client";
@@ -3670,7 +4065,7 @@ export function TaskItem({ id, done, title }: { id: number; done: boolean; title
 
 ### `components/AddTaskForm.tsx`
 
-Input "+ Agregar tarea" al pie de cada ruta.
+Input "+ Agregar tarea".
 
 ```tsx
 "use client";
@@ -3698,7 +4093,7 @@ export function AddTaskForm({ initiativeId }: { initiativeId: number }) {
 
 ### `components/TaskToggle.tsx`
 
-⚠️ **ARCHIVO HUÉRFANO.** Versión antigua de la tarea, solo permitía marcar/desmarcar. Lo sustituyeron `TaskItem` + `TaskList`. Nadie lo importa; se puede borrar sin consecuencias. Se incluye aquí solo para que el inventario esté completo.
+⚠️ **ARCHIVO HUÉRFANO.** Versión antigua de la tarea. Lo sustituyeron `TaskItem` + `TaskList`; nadie lo importa y se puede borrar. Se incluye solo para que el inventario esté completo.
 
 ```tsx
 "use client";
@@ -3727,4 +4122,4 @@ export function TaskToggle({ id, done, title }: { id: number; done: boolean; tit
 
 ---
 
-*Fin del traspaso. 33 archivos, 2860 líneas de código fuente.*
+*Fin del traspaso.*
