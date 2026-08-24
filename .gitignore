@@ -1,0 +1,20 @@
+# dependencias
+/node_modules
+
+# build de Next.js
+/.next
+/out
+
+# variables de entorno (NUNCA subir: contienen la cadena de Postgres)
+.env
+.env.local
+.env*.local
+
+# Vercel
+.vercel
+
+# sistema
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*

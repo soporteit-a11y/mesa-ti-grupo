@@ -1,0 +1,281 @@
+"use server";
+
+import { sql, ensureSchema } from "@/lib/db";
+import { revalidatePath } from "next/cache";
+
+export async function createTicket(formData: FormData) {
+  await ensureSchema();
+  const title = String(formData.get("title") || "").trim();
+  const description = String(formData.get("description") || "");
+  const company_id = Number(formData.get("company_id"));
+  const category = String(formData.get("category") || "Otros");
+  const priority = String(formData.get("priority") || "Baja");
+  const requester = String(formData.get("requester") || "");
+  if (!title || !company_id) return;
+
+  await sql!`INSERT INTO tickets (title, description, company_id, category, priority, status, requester)
+    VALUES (${title}, ${description}, ${company_id}, ${category}, ${priority}, 'nuevo', ${requester})`;
+
+  revalidatePath("/tickets");
+  revalidatePath("/");
+}
+
+export async function createCollaborator(formData: FormData) {
+  await ensureSchema();
+  const name = String(formData.get("name") || "").trim();
+  const companyRaw = String(formData.get("company_id") || "");
+  const company_id = companyRaw ? Number(companyRaw) : null;
+  if (!name) return;
+  await sql!`INSERT INTO collaborators (name, company_id) VALUES (${name}, ${company_id}) ON CONFLICT (name) DO NOTHING`;
+  revalidatePath("/tickets");
+}
+
+/* ---------- Configuracion: empresas, categorias, colaboradores ---------- */
+export async function createCompany(formData: FormData) {
+  await ensureSchema();
+  const name = String(formData.get("name") || "").trim();
+  const color = String(formData.get("color") || "#7FB93E");
+  if (!name) return;
+  const slug = name.toLowerCase().replace(/\s+/g, "-");
+  await sql!`INSERT INTO companies (name, slug, color) VALUES (${name}, ${slug}, ${color}) ON CONFLICT (name) DO NOTHING`;
+  revalidatePath("/config");
+  revalidatePath("/tickets");
+  revalidatePath("/");
+}
+
+export async function updateCompany(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const name = String(formData.get("name") || "").trim();
+  const color = String(formData.get("color") || "#7FB93E");
+  if (!id || !name) return;
+  await sql!`UPDATE companies SET name = ${name}, color = ${color} WHERE id = ${id}`;
+  revalidatePath("/config");
+  revalidatePath("/tickets");
+  revalidatePath("/");
+}
+
+export async function deleteCompany(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  if (!id) return;
+  const used = await sql!`SELECT
+    (SELECT COUNT(*) FROM tickets WHERE company_id = ${id})::int +
+    (SELECT COUNT(*) FROM collaborators WHERE company_id = ${id})::int +
+    (SELECT COUNT(*) FROM initiatives WHERE company_id = ${id})::int AS n`;
+  if (used[0].n > 0) return; // no borrar si tiene datos asociados
+  await sql!`DELETE FROM companies WHERE id = ${id}`;
+  revalidatePath("/config");
+}
+
+export async function createCategory(formData: FormData) {
+  await ensureSchema();
+  const name = String(formData.get("name") || "").trim();
+  if (!name) return;
+  await sql!`INSERT INTO categories (name) VALUES (${name}) ON CONFLICT (name) DO NOTHING`;
+  revalidatePath("/config");
+  revalidatePath("/tickets");
+}
+
+export async function deleteCategory(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  if (!id) return;
+  await sql!`DELETE FROM categories WHERE id = ${id}`;
+  revalidatePath("/config");
+  revalidatePath("/tickets");
+}
+
+export async function updateCategorySla(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const sla_hours = Number(formData.get("sla_hours"));
+  if (!id || !sla_hours || sla_hours < 1) return;
+  await sql!`UPDATE categories SET sla_hours = ${sla_hours} WHERE id = ${id}`;
+  revalidatePath("/config");
+  revalidatePath("/tickets");
+  revalidatePath("/");
+}
+
+/* ---------- Respuestas rapidas ---------- */
+export async function createCanned(formData: FormData) {
+  await ensureSchema();
+  const title = String(formData.get("title") || "").trim();
+  const text = String(formData.get("text") || "").trim();
+  if (!title || !text) return;
+  await sql!`INSERT INTO canned_responses (title, text) VALUES (${title}, ${text}) ON CONFLICT (title) DO NOTHING`;
+  revalidatePath("/config");
+  revalidatePath("/tickets");
+}
+
+export async function deleteCanned(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  if (!id) return;
+  await sql!`DELETE FROM canned_responses WHERE id = ${id}`;
+  revalidatePath("/config");
+  revalidatePath("/tickets");
+}
+
+export async function deleteCollaborator(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  if (!id) return;
+  await sql!`DELETE FROM collaborators WHERE id = ${id}`;
+  revalidatePath("/config");
+  revalidatePath("/tickets");
+}
+
+export async function updateTicket(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const title = String(formData.get("title") || "").trim();
+  const description = String(formData.get("description") || "");
+  const company_id = Number(formData.get("company_id"));
+  const category = String(formData.get("category") || "Otros");
+  const priority = String(formData.get("priority") || "Baja");
+  const requester = String(formData.get("requester") || "");
+  if (!id || !title || !company_id) return;
+
+  await sql!`UPDATE tickets SET
+    title = ${title}, description = ${description}, company_id = ${company_id},
+    category = ${category}, priority = ${priority}, requester = ${requester}, updated_at = now()
+    WHERE id = ${id}`;
+
+  revalidatePath("/tickets");
+  revalidatePath("/");
+}
+
+export async function addComment(formData: FormData) {
+  await ensureSchema();
+  const ticket_id = Number(formData.get("ticket_id"));
+  const author = String(formData.get("author") || "").trim();
+  const text = String(formData.get("text") || "").trim();
+  if (!ticket_id || !text) return;
+  await sql!`INSERT INTO ticket_comments (ticket_id, author, text) VALUES (${ticket_id}, ${author || null}, ${text})`;
+  revalidatePath("/tickets");
+}
+
+export async function setTicketRequester(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const requester = String(formData.get("requester") || "");
+  if (!id) return;
+  await sql!`UPDATE tickets SET requester = ${requester}, updated_at = now() WHERE id = ${id}`;
+  revalidatePath("/tickets");
+}
+
+export async function setStatus(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const status = String(formData.get("status"));
+  if (!id || !status) return;
+
+  if (status === "resuelto") {
+    await sql!`UPDATE tickets SET status = ${status}, resolved_at = now(), updated_at = now() WHERE id = ${id}`;
+  } else {
+    await sql!`UPDATE tickets SET status = ${status}, resolved_at = NULL, updated_at = now() WHERE id = ${id}`;
+  }
+  revalidatePath("/tickets");
+  revalidatePath("/");
+}
+
+/* ---------- Rutas de trabajo ---------- */
+export async function createInitiative(formData: FormData) {
+  await ensureSchema();
+  const company_id = Number(formData.get("company_id"));
+  const title = String(formData.get("title") || "").trim();
+  const area = String(formData.get("area") || "");
+  const owner = String(formData.get("owner") || "");
+  const tasksRaw = String(formData.get("tasks") || "");
+  if (!company_id || !title) return;
+
+  const rows = await sql!`INSERT INTO initiatives (company_id, title, area, status, owner)
+    VALUES (${company_id}, ${title}, ${area}, 'planificado', ${owner}) RETURNING id`;
+  const id = rows[0].id;
+  const tasks = tasksRaw.split("\n").map((t) => t.trim()).filter(Boolean);
+  let pos = 0;
+  for (const t of tasks) {
+    await sql!`INSERT INTO initiative_tasks (initiative_id, title, position) VALUES (${id}, ${t}, ${pos})`;
+    pos++;
+  }
+  revalidatePath("/rutas");
+  revalidatePath("/");
+}
+
+export async function toggleTask(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  if (!id) return;
+  await sql!`UPDATE initiative_tasks SET done = NOT done WHERE id = ${id}`;
+  revalidatePath("/rutas");
+  revalidatePath("/");
+}
+
+export async function addTask(formData: FormData) {
+  await ensureSchema();
+  const initiative_id = Number(formData.get("initiative_id"));
+  const title = String(formData.get("title") || "").trim();
+  if (!initiative_id || !title) return;
+  const pos = await sql!`SELECT COALESCE(MAX(position), -1) + 1 AS p FROM initiative_tasks WHERE initiative_id = ${initiative_id}`;
+  await sql!`INSERT INTO initiative_tasks (initiative_id, title, position) VALUES (${initiative_id}, ${title}, ${pos[0].p})`;
+  revalidatePath("/rutas");
+}
+
+export async function updateTaskTitle(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const title = String(formData.get("title") || "").trim();
+  if (!id || !title) return;
+  await sql!`UPDATE initiative_tasks SET title = ${title} WHERE id = ${id}`;
+  revalidatePath("/rutas");
+}
+
+export async function deleteTask(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  if (!id) return;
+  await sql!`DELETE FROM initiative_tasks WHERE id = ${id}`;
+  revalidatePath("/rutas");
+  revalidatePath("/");
+}
+
+export async function setInitiativeStatus(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const status = String(formData.get("status"));
+  if (!id || !status) return;
+  await sql!`UPDATE initiatives SET status = ${status} WHERE id = ${id}`;
+  revalidatePath("/rutas");
+  revalidatePath("/");
+}
+
+export async function updateInitiativeTitle(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const title = String(formData.get("title") || "").trim();
+  if (!id || !title) return;
+  await sql!`UPDATE initiatives SET title = ${title} WHERE id = ${id}`;
+  revalidatePath("/rutas");
+  revalidatePath("/");
+}
+
+export async function deleteInitiative(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  if (!id) return;
+  await sql!`DELETE FROM initiatives WHERE id = ${id}`;
+  revalidatePath("/rutas");
+  revalidatePath("/");
+}
+
+export async function reorderTasks(formData: FormData) {
+  await ensureSchema();
+  const initiative_id = Number(formData.get("initiative_id"));
+  const order = String(formData.get("order") || "").split(",").map(Number).filter(Boolean);
+  if (!initiative_id || order.length === 0) return;
+  for (let i = 0; i < order.length; i++) {
+    await sql!`UPDATE initiative_tasks SET position = ${i} WHERE id = ${order[i]} AND initiative_id = ${initiative_id}`;
+  }
+  revalidatePath("/rutas");
+}
