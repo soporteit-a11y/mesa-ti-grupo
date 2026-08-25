@@ -1,5 +1,10 @@
 # HANDOFF — Mesa TI · Grupo Empresarial
 
+> ### 📍 ¿Retomas el proyecto desde cero o desde otra cuenta?
+> **Lee antes `CONTINUIDAD.md`**, en esta misma carpeta. Este documento describe *el proyecto*;
+> aquel describe *cómo se trabaja en él*, en qué estado quedó y las trampas del entorno.
+> Los dos juntos son el traspaso completo.
+
 > **Propósito de este documento.** Es un traspaso completo y autocontenido del proyecto.
 > Si lo pegas en cualquier otro LLM/IA (ChatGPT, Gemini, Copilot, otro Claude, etc.), esa IA
 > tiene aquí **todo** lo necesario para entender el sistema y reconstruirlo idéntico desde cero:
@@ -414,6 +419,7 @@ helpdesk/
 ├── tsconfig.json             # alias "@/*" → raíz del proyecto
 ├── next-env.d.ts
 ├── .gitignore                # excluye node_modules, .next, .env, .vercel
+├── CONTINUIDAD.md            # cómo retomar el proyecto: reglas, estado y trampas
 ├── HANDOFF.md                # este documento
 │
 ├── app/
@@ -722,6 +728,18 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 25 de agosto de 2026 — Documento de continuidad
+
+- Nuevo **`CONTINUIDAD.md`**: punto de entrada para retomar el proyecto desde otra cuenta o con
+  otra IA. Recoge lo que este documento no cubre: las reglas de trabajo que puso el usuario, el
+  estado exacto al cerrar sesión, las trampas del entorno (credencial cruzada de GitHub, APIs de
+  Vercel que dan 404, el peligro de la clave `tickets_seed`) y la advertencia de que **los datos
+  reales viven en Neon, no en el repositorio**.
+- `app/layout.tsx`: el `catch` del contador de avisos pasa a registrar el error con
+  `console.error`. Antes era un `catch` vacío, lo que hacía que un fallo de la consulta fuese
+  indistinguible de "no hay nada vencido" — es decir, las alertas podían dejar de avisar en
+  silencio. Ahora queda en los logs de Vercel.
 
 ### 24 de agosto de 2026 (tanda 3) — Contador de avisos de SLA y git operativo
 
@@ -1267,7 +1285,7 @@ async function seedInitiatives(q: NonNullable<typeof sql>) {
 
 ### `lib/data.ts`
 
-Todas las consultas de lectura, ninguna escribe. Incluye `getAlertCounts()`, que alimenta la insignia del menú, y `getSupportDashboard()`, con el KPI de SLA. **Ambas repiten la fórmula de SLA en SQL** (§5.6).
+Todas las consultas de lectura, ninguna escribe. Incluye `getAlertCounts()` (insignia del menú) y `getSupportDashboard()` (KPI de SLA). **Ambas repiten la fórmula de SLA en SQL** (§5.6).
 
 ```ts
 import { sql, ensureSchema } from "./db";
@@ -1622,7 +1640,7 @@ export function fmtSlaHours(h: number): string {
 
 ### `app/actions.ts`
 
-Las 24 mutaciones del sistema, todas con el patrón de cinco pasos. Agrupadas por área: tickets, configuración, respuestas rápidas y rutas de trabajo.
+Las 24 mutaciones del sistema, todas con el patrón de cinco pasos.
 
 ```ts
 "use server";
@@ -1914,7 +1932,7 @@ export async function reorderTasks(formData: FormData) {
 
 ### `app/layout.tsx`
 
-Shell de la aplicación. **Server Component asíncrono**: consulta `getAlertCounts()` para la insignia del menú, protegido con `hasDb` + `try/catch`. Exporta `metadata` y `viewport`.
+Shell de la aplicación. **Server Component asíncrono**: consulta `getAlertCounts()` para la insignia, con guarda `hasDb` + `try/catch` que **registra el error** en lugar de silenciarlo. Exporta `metadata` y `viewport`.
 
 ```tsx
 import "./globals.css";
@@ -1939,7 +1957,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // esta conectada o la consulta falla, se muestra sin insignia.
   let alerts = { breached: 0, dueSoon: 0 };
   if (hasDb) {
-    try { alerts = await getAlertCounts(); } catch (e) {}
+    try {
+      alerts = await getAlertCounts();
+    } catch (e) {
+      // Se registra a proposito: sin esto, un fallo de la consulta seria
+      // indistinguible de "no hay nada vencido" y las alertas dejarian de
+      // avisar en silencio, que es justo lo que no debe pasar.
+      console.error("[avisos SLA] getAlertCounts fallo:", e);
+    }
   }
 
   return (
@@ -1982,7 +2007,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
 ### `app/page.tsx`
 
-Dashboard. El componente `Donut` local dibuja las donas en SVG; el texto se centra con flexbox superpuesto, no con `text-anchor`.
+Dashboard. `Donut` dibuja las donas en SVG; el texto se centra con flexbox superpuesto, no con `text-anchor`.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2192,7 +2217,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
 
 ### `app/tickets/page.tsx`
 
-Mesa de ayuda. Franja de aviso de SLA, `SlaCell` por fila, `data-label` en cada `<td>` para el modo tarjeta en móvil. Los filtros se aplican en memoria.
+Mesa de ayuda. Franja de aviso de SLA, `SlaCell` por fila y `data-label` en cada `<td>` para el modo tarjeta en móvil.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2344,7 +2369,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: Reco
 
 ### `app/rutas/page.tsx`
 
-Rutas de trabajo. Agrupa por empresa y delega el título en `<InitiativeTitle>` y el checklist en `<TaskList>`.
+Rutas de trabajo. Agrupa por empresa y delega en `<InitiativeTitle>` y `<TaskList>`.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2448,7 +2473,7 @@ export default async function RutasPage({ searchParams }: { searchParams: Record
 
 ### `app/config/page.tsx`
 
-Configuración. Cuatro bloques CRUD enlazados directo a las Server Actions, sin JavaScript de cliente.
+Configuración. Cuatro bloques CRUD enlazados directo a las Server Actions.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2616,7 +2641,7 @@ export default async function ConfigPage() {
 
 ### `app/globals.css`
 
-**Todo el CSS del proyecto en un solo archivo.** Las variables de `:root` son el sistema de diseño (§8) y el bloque `RESPONSIVE` del final contiene los 7 puntos de quiebre.
+**Todo el CSS del proyecto.** Las variables de `:root` son el sistema de diseño (§8); el bloque `RESPONSIVE` del final tiene los 7 puntos de quiebre.
 
 ```css
 :root {
@@ -3191,7 +3216,7 @@ code { font-family: var(--font-mono); font-size: 12.5px; background: var(--surfa
 
 ### `components/NavLink.tsx`
 
-Enlace del menú lateral: icono, estado activo e **insignia de avisos de SLA** (roja para vencidos, ámbar para próximos a vencer).
+Enlace del menú: icono, estado activo e **insignia de avisos de SLA** (roja vencidos, ámbar por vencer).
 
 ```tsx
 "use client";
@@ -3262,7 +3287,7 @@ export function NavLink({
 
 ### `components/Setup.tsx`
 
-Pantalla que se muestra cuando no hay base de datos conectada.
+Pantalla que sale cuando no hay base de datos conectada.
 
 ```tsx
 export function Setup() {
@@ -3303,7 +3328,7 @@ export function Setup() {
 
 ### `components/DateRangeFilter.tsx`
 
-Rango de fechas del dashboard (`?from=`/`?to=`).
+Rango de fechas del dashboard.
 
 ```tsx
 "use client";
@@ -3352,7 +3377,7 @@ export function DateRangeFilter() {
 
 ### `components/Filters.tsx`
 
-Los cinco filtros de la bandeja de tickets.
+Los cinco filtros de la bandeja.
 
 ```tsx
 "use client";
@@ -3542,7 +3567,7 @@ export function NewTicketDialog({ companies, categories, collaborators }: { comp
 
 ### `components/TicketOpenLink.tsx`
 
-Convierte el asunto en un botón que añade `?ticket=N` a la URL.
+Asunto clicable que añade `?ticket=N` a la URL.
 
 ```tsx
 "use client";
@@ -3570,7 +3595,7 @@ export function TicketOpenLink({ id, title }: { id: number; title: string }) {
 
 ### `components/TicketDetailDialog.tsx`
 
-Diálogo de detalle: edición, `SlaBadge`, comentarios y respuestas rápidas vía `commentTextRef`.
+Detalle: edición, `SlaBadge`, comentarios y respuestas rápidas.
 
 ```tsx
 "use client";
@@ -3767,7 +3792,7 @@ export function TicketDetailDialog({
 
 ### `components/StatusControl.tsx`
 
-Select de estado de ticket que se auto-envía.
+Select de estado que se auto-envía.
 
 ```tsx
 "use client";
@@ -3801,7 +3826,7 @@ export function StatusControl({ id, status }: { id: number; status: string }) {
 
 ### `components/RequesterControl.tsx`
 
-Select de solicitante; conserva como opción a un solicitante que ya no esté en la lista.
+Select de solicitante; conserva a uno que ya no esté en la lista.
 
 ```tsx
 "use client";
@@ -3839,7 +3864,7 @@ export function RequesterControl({ id, requester, collaborators }: { id: number;
 
 ### `components/CollaboratorsDialog.tsx`
 
-Alta rápida de colaboradores desde `/tickets`.
+Alta rápida de colaboradores.
 
 ```tsx
 "use client";
@@ -3909,7 +3934,7 @@ export function CollaboratorsDialog({ collaborators, companies }: { collaborator
 
 ### `components/SlaInput.tsx`
 
-Horas de SLA por categoría. Guarda al perder el foco.
+Horas de SLA por categoría; guarda al perder el foco.
 
 ```tsx
 "use client";
@@ -3938,7 +3963,7 @@ export function SlaInput({ id, hours }: { id: number; hours: number | null }) {
 
 ### `components/NewInitiativeDialog.tsx`
 
-Diálogo de alta de ruta; el textarea crea una tarea por línea.
+Alta de ruta; el textarea crea una tarea por línea.
 
 ```tsx
 "use client";
@@ -4045,7 +4070,7 @@ export function InitiativeStatusControl({ id, status }: { id: number; status: st
 
 ### `components/InitiativeTitle.tsx`
 
-**Título de ruta editable en línea.** Enter confirma, Escape revierte, guarda al perder el foco.
+**Título de ruta editable en línea.**
 
 ```tsx
 "use client";
@@ -4083,7 +4108,7 @@ export function InitiativeTitle({ id, title }: { id: number; title: string }) {
 
 ### `components/DeleteInitiativeButton.tsx`
 
-Botón ✕ que elimina una ruta completa (las tareas caen por `ON DELETE CASCADE`).
+Elimina una ruta completa (tareas por `ON DELETE CASCADE`).
 
 ```tsx
 "use client";
@@ -4111,7 +4136,7 @@ export function DeleteInitiativeButton({ id }: { id: number }) {
 
 ### `components/TaskList.tsx`
 
-Arrastrar-soltar en escritorio y **botones ▲▼ en móvil**, porque la API de arrastre de HTML5 no responde al tacto. Ambos usan `persist()`.
+Arrastrar en escritorio, **botones ▲▼ en móvil** (el arrastre HTML5 no responde al tacto).
 
 ```tsx
 "use client";
@@ -4195,7 +4220,7 @@ export function TaskList({ initiativeId, tasks }: { initiativeId: number; tasks:
 
 ### `components/TaskItem.tsx`
 
-Una tarea: casilla, título editable en línea y botón de borrar.
+Tarea: casilla, título editable y borrar.
 
 ```tsx
 "use client";
@@ -4284,4 +4309,4 @@ export function AddTaskForm({ initiativeId }: { initiativeId: number }) {
 
 ---
 
-*Fin del traspaso.*
+*Fin del traspaso. Ver también `CONTINUIDAD.md`.*

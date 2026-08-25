@@ -20,7 +20,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // esta conectada o la consulta falla, se muestra sin insignia.
   let alerts = { breached: 0, dueSoon: 0 };
   if (hasDb) {
-    try { alerts = await getAlertCounts(); } catch (e) {}
+    try {
+      alerts = await getAlertCounts();
+    } catch (e) {
+      // Se registra a proposito: sin esto, un fallo de la consulta seria
+      // indistinguible de "no hay nada vencido" y las alertas dejarian de
+      // avisar en silencio, que es justo lo que no debe pasar.
+      console.error("[avisos SLA] getAlertCounts fallo:", e);
+    }
   }
 
   return (
