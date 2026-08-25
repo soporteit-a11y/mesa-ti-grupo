@@ -45,9 +45,15 @@ export function NewInitiativeDialog({ companies }: { companies: any[] }) {
               <label>Titulo de la ruta *</label>
               <input type="text" name="title" required placeholder="Ej: Aseguramiento perimetral FortiGate" />
             </div>
-            <div className="field">
-              <label>Responsable</label>
-              <input type="text" name="owner" placeholder="Quien lidera" />
+            <div className="row2">
+              <div className="field">
+                <label>Responsable</label>
+                <input type="text" name="owner" placeholder="Quien lidera" />
+              </div>
+              <div className="field">
+                <label>Fecha límite</label>
+                <input type="date" name="due_date" />
+              </div>
             </div>
             <div className="field">
               <label>Tareas (una por linea)</label>

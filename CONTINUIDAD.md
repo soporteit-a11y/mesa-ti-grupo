@@ -165,13 +165,11 @@ Vercel Cron (`vercel.json`) llamando a un endpoint `/api/cron/alertas`, con Rese
 *Limitación real: el plan Hobby de Vercel solo permite cron **diario**. Para avisos por hora hace
 falta Pro (20 USD/mes).* Estimación: ~3 h. Requiere API key de Resend.
 
-**P3 · Alertas para rutas de trabajo.**
-**Hoy es imposible por fecha:** `initiatives` no tiene columna de vencimiento. Hay dos caminos:
-- Añadir `due_date` a `initiatives`, más su campo en el diálogo de alta y en la tarjeta
-- O basar el aviso en inactividad ("ninguna tarea completada en 30 días"), que también requiere
-  una columna de fecha en `initiative_tasks`, que tampoco existe
-
-Cualquiera de los dos empieza por una migración de esquema en `ensureSchema()` (§5.5 del handoff).
+**P3 · Alertas para rutas de trabajo. ✅ Resuelto en parte (2026-08-25).**
+`initiatives.due_date` ya existe, editable desde la tarjeta y el diálogo de alta. Cada ruta muestra
+un chip "Atrasado Xd" / "Vence en Xd" calculado en el cliente. **Lo que falta si se quiere más:**
+insignia en el menú lateral para rutas atrasadas (hoy solo hay chip en la tarjeta), siguiendo el
+mismo patrón que la alerta de SLA de tickets.
 
 **P4 · Alertas nivel 3 — tiempo real.**
 WebSockets o push del navegador. **Desproporcionado** para un sistema de un solo usuario.
@@ -187,21 +185,22 @@ un middleware con Basic Auth.
 
 ### 🔵 Deuda técnica (nada urgente, todo conocido)
 
-**P6 · La fórmula de SLA está repetida en tres sitios.**
-`slaInfo()` en `lib/priority.ts`, el KPI de `getSupportDashboard()` y el CTE de `getAlertCounts()`
-(§5.6 del handoff). Si alguien cambia los multiplicadores en uno solo, el sistema empieza a dar
-cifras contradictorias. Unificarlo sería una mejora real.
+**P6 · ✅ Resuelto (2026-08-25).** La fórmula de SLA en SQL se unificó en la función
+`ticket_sla_deadline()` (`lib/db.ts`), usada tanto por `getSupportDashboard()` como por
+`getAlertCounts()`. Queda en dos sitios en vez de tres: esa función SQL + `slaInfo()` en
+`lib/priority.ts` (§5.6 del handoff). Si cambias los multiplicadores, sigue habiendo que tocar
+ambos.
 
 **P7 · `tickets.category` es texto libre, no clave foránea.**
 Se une con `categories` por nombre. Si el usuario **renombra** una categoría en `/config`, los
 tickets antiguos quedan huérfanos y su SLA cae al valor por defecto de 24 h vía `COALESCE`.
 Ya pasó una vez: "Flota (Tablets)" hoy se llama "Flota - Tablets / Celulares".
 
-**P8 · Columnas y tabla muertas.**
-`urgency`, `impact`, `weight`, `score`, `service_id`, `assignee` y `tickets.sla_hours` sobran, más
-la tabla `services` entera. Son restos de un modelo de priorización P1–P4 anterior. También siguen
-en `lib/priority.ts` las constantes `PRIORITIES`, `PRIORITY_META`, `computeScore`, `levelFor` y
-`slaForLevel`, ya sin uso. Limpiarlo requiere confirmar que nada las importa.
+**P8 · ✅ Resuelto (2026-08-25).** Se eliminaron `urgency`, `impact`, `weight`, `score`,
+`service_id`, `assignee`, `tickets.sla_hours` y la tabla `services` completa (todo con
+`DROP ... IF EXISTS`, corre en el próximo `ensureSchema()` tras el deploy). También se quitaron de
+`lib/priority.ts` las constantes `PRIORITIES`, `PRIORITY_META`, `computeScore`, `levelFor` y
+`slaForLevel` — se confirmó por grep que ningún archivo las importaba antes de borrarlas.
 
 ### ⚪ Higiene del entorno
 

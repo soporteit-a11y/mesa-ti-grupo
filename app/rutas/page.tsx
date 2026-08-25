@@ -6,10 +6,20 @@ import { TaskList } from "@/components/TaskList";
 import { AddTaskForm } from "@/components/AddTaskForm";
 import { InitiativeStatusControl } from "@/components/InitiativeStatusControl";
 import { InitiativeTitle } from "@/components/InitiativeTitle";
+import { InitiativeDueDate } from "@/components/InitiativeDueDate";
 import { DeleteInitiativeButton } from "@/components/DeleteInitiativeButton";
 import { FiltersCompanyClient } from "@/components/FiltersCompanyClient";
 
 export const dynamic = "force-dynamic";
+
+function dueInfo(dueDate: string | null, status: string) {
+  if (!dueDate || status === "completado") return null;
+  const due = new Date(dueDate + "T23:59:59");
+  const diffDays = Math.ceil((due.getTime() - Date.now()) / 86400000);
+  if (diffDays < 0) return { cls: "crit", label: `Atrasado ${Math.abs(diffDays)}d` };
+  if (diffDays <= 7) return { cls: "warn", label: `Vence en ${diffDays}d` };
+  return { cls: "ok", label: `Vence en ${diffDays}d` };
+}
 
 export default async function RutasPage({ searchParams }: { searchParams: Record<string, string> }) {
   if (!hasDb) return <Setup />;
@@ -60,7 +70,9 @@ export default async function RutasPage({ searchParams }: { searchParams: Record
                 <span className="mono" style={{ color: "var(--muted)", fontSize: 12 }}>{g.items.length} ruta(s)</span>
               </div>
               <div className="grid g2">
-                {g.items.map((i) => (
+                {g.items.map((i) => {
+                  const due = dueInfo(i.due_date, i.status);
+                  return (
                   <article className="card init-card" key={i.id}>
                     <div className="init-top">
                       <div className="init-head">
@@ -68,6 +80,10 @@ export default async function RutasPage({ searchParams }: { searchParams: Record
                         <div className="init-sub">
                           {i.area ? <span className="area-tag">{i.area}</span> : null}
                           {i.owner ? <span className="mono" style={{ color: "var(--muted)" }}> · {i.owner}</span> : null}
+                        </div>
+                        <div className="init-due-row">
+                          <InitiativeDueDate id={i.id} dueDate={i.due_date} />
+                          {due ? <span className={"sla-chip " + due.cls}>{due.label}</span> : null}
                         </div>
                       </div>
                       <div className="init-actions">
@@ -86,7 +102,8 @@ export default async function RutasPage({ searchParams }: { searchParams: Record
                     <TaskList initiativeId={i.id} tasks={i.tasks} />
                     <AddTaskForm initiativeId={i.id} />
                   </article>
-                ))}
+                  );
+                })}
               </div>
             </section>
           ))

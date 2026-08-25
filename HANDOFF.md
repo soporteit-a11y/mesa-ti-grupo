@@ -9,12 +9,13 @@
 > Si lo pegas en cualquier otro LLM/IA (ChatGPT, Gemini, Copilot, otro Claude, etc.), esa IA
 > tiene aquí **todo** lo necesario para entender el sistema y reconstruirlo idéntico desde cero:
 > contexto de negocio, decisiones de arquitectura, esquema de base de datos, el código fuente
-> íntegro de los 34 archivos, el sistema de diseño, el procedimiento de despliegue y las trampas
+> íntegro de los 35 archivos, el sistema de diseño, el procedimiento de despliegue y las trampas
 > ya descubiertas.
 >
 > **Fecha del traspaso:** 24 de agosto de 2026
-> **Última actualización:** 24 de agosto de 2026 — contador de avisos de SLA en el menú,
-> despliegue por git ya operativo. Ver el registro de cambios en §14.
+> **Última actualización:** 25 de agosto de 2026 — fecha límite en rutas de trabajo, fórmula de
+> SLA unificada en una función SQL, limpieza del modelo de priorización P1-P4 (tabla `services` y
+> columnas muertas de `tickets`) y panel de tickets por empresa en el dashboard. Ver §14.
 > **Estado:** en producción y en uso real.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
@@ -235,18 +236,18 @@ horas objetivo = horas_base_de_la_categoría × multiplicador_de_prioridad
 - **Evaluación**: para tickets cerrados se compara contra `resolved_at`; para los abiertos, contra
   la hora actual.
 
-Está implementado **tres veces y las tres deben mantenerse sincronizadas**:
+Está implementado **dos veces y las dos deben mantenerse sincronizadas** (antes eran tres — ver
+§14, 2026-08-25, unificación de la parte SQL):
 
 1. En TypeScript — `slaInfo()` en `lib/priority.ts`, usado para pintar cada chip de la tabla, la
    insignia del diálogo de detalle y el conteo de la franja de aviso de `/tickets`.
-2. En SQL — la expresión `COUNT(*) FILTER (...)` con `CASE t.priority WHEN 'Alta' THEN 0.5 ...`
-   dentro de `getSupportDashboard()` en `lib/data.ts`, que calcula el KPI "Fuera de SLA".
-3. En SQL — el CTE `abiertos` de `getAlertCounts()` en `lib/data.ts`, que alimenta la insignia
-   del menú lateral.
+2. En SQL — la función `ticket_sla_deadline(created_at, sla_hours, priority)`, creada en
+   `ensureSchema()` (`lib/db.ts`) con `CREATE OR REPLACE FUNCTION`. La usan tanto
+   `getSupportDashboard()` (KPI "Fuera de SLA") como `getAlertCounts()` (insignia del menú), así
+   que el CASE de multiplicadores vive en un solo lugar del lado SQL.
 
-Si cambias los multiplicadores, **cámbialos en los tres sitios.** Es la deuda técnica más
-propensa a causar incoherencias del proyecto: unificarlo en una sola función SQL sería una mejora
-razonable.
+Si cambias los multiplicadores, **cámbialos en los dos sitios**: la constante `PRIORITY_SLA_MULT`
+(TypeScript) y el `CASE` dentro de `ticket_sla_deadline()` (SQL, en `lib/db.ts`).
 
 ### 5.7 Estado en la URL
 
@@ -266,20 +267,20 @@ leer `useSearchParams()`, clonar a `URLSearchParams`, mutar y `router.push()`.
 
 ## 6. Modelo de datos
 
-Nueve tablas en Postgres. Este es el esquema efectivo que produce `ensureSchema()`:
+Ocho tablas en Postgres, más la función SQL `ticket_sla_deadline()` (§5.6). La novena tabla,
+`services`, y varias columnas muertas de `tickets` se eliminaron el 2026-08-25 (§14) por no tener
+uso — este es el esquema efectivo actual de `ensureSchema()`:
 
 ```sql
 companies         (id, name UNIQUE, slug, color)
-services          (id, name UNIQUE, weight, vendor, sla_hours)
 categories        (id, name UNIQUE, sla_hours DEFAULT 24)
 collaborators     (id, name UNIQUE, company_id → companies)
-tickets           (id, title, description, company_id → companies, service_id,
-                   category, urgency, impact, weight, score, priority,
-                   status DEFAULT 'resuelto', requester, assignee, sla_hours,
+tickets           (id, title, description, company_id → companies,
+                   category, priority, status DEFAULT 'resuelto', requester,
                    created_at, updated_at, resolved_at)
 ticket_comments   (id, ticket_id → tickets ON DELETE CASCADE, author, text, created_at)
 initiatives       (id, company_id → companies, title, area,
-                   status DEFAULT 'planificado', owner, created_at)
+                   status DEFAULT 'planificado', owner, due_date, created_at)
 initiative_tasks  (id, initiative_id → initiatives ON DELETE CASCADE,
                    title, done DEFAULT false, position DEFAULT 0)
 meta              (k PRIMARY KEY, v)          -- control de migraciones de una sola vez
@@ -293,10 +294,10 @@ canned_responses  (id, title UNIQUE, text)
   una categoría en `/config`, los tickets viejos quedan huérfanos y su SLA cae al valor por defecto
   de 24 h vía `COALESCE`. Es una deuda técnica conocida y aceptada. *(De hecho ya ocurrió: la
   categoría sembrada como "Flota (Tablets)" hoy se llama "Flota - Tablets / Celulares" en producción.)*
-- **Columnas muertas:** `urgency`, `impact`, `weight`, `score`, `service_id`, `assignee`,
-  `tickets.sla_hours` sobran. Son restos de un modelo de priorización P1–P4 anterior. Se les quitó
-  el `NOT NULL` para que no estorben, pero siguen existiendo. La tabla `services` completa también
-  está en desuso.
+  Sigue pendiente (P7 en CONTINUIDAD.md).
+- **`initiatives.due_date`** (agregada 2026-08-25): fecha límite opcional de la ruta, editable en
+  línea desde `<InitiativeDueDate>`. `dueInfo()` en `app/rutas/page.tsx` la compara contra hoy para
+  mostrar el chip "Atrasado Xd" / "Vence en Xd"; una ruta `completado` nunca se marca atrasada.
 - **Valores de `status` en tickets:** `nuevo`, `en_progreso`, `en_espera`, `resuelto`.
   Un ticket recién creado entra como `nuevo`; los importados del CSV entraron como `resuelto`.
   Al pasar a `resuelto` se sella `resolved_at = now()`; al salir de `resuelto` se pone a `NULL`.
@@ -452,13 +453,14 @@ helpdesk/
     ├── NewInitiativeDialog.tsx     # diálogo de alta de ruta
     ├── InitiativeStatusControl.tsx # select de estado de ruta
     ├── InitiativeTitle.tsx         # título de ruta editable en línea
+    ├── InitiativeDueDate.tsx       # fecha límite de ruta, guarda al cambiar
     ├── DeleteInitiativeButton.tsx  # botón ✕ para borrar una ruta completa
     ├── TaskList.tsx                # lista de tareas: arrastrar-soltar + botones ▲▼ en móvil
     ├── TaskItem.tsx                # tarea: casilla + título editable + borrar
     └── AddTaskForm.tsx             # input "+ Agregar tarea"
 ```
 
-**34 archivos** sin contar `node_modules`, `.next` ni `package-lock.json`.
+**35 archivos** sin contar `node_modules`, `.next` ni `package-lock.json`.
 
 ---
 
@@ -686,11 +688,11 @@ Hobby de Vercel solo permite cron con frecuencia diaria** — para avisos por ho
 **Nivel 3 — Tiempo real (WebSockets o push del navegador).** Desproporcionado para un sistema de un
 solo usuario. No recomendado.
 
-**Pendiente conocido — alertas para rutas de trabajo.** Hoy **no se les puede poner alerta por
-fecha**, porque `initiatives` no tiene columna de vencimiento. Para avisar de rutas atrasadas habría
-que añadir antes un `due_date` (más su campo en el diálogo de alta y en la tarjeta), o bien basar el
-aviso en inactividad —por ejemplo "ninguna tarea completada en 30 días"—, que sí se puede calcular
-con los datos actuales pero requiere una columna de fecha en `initiative_tasks`, que tampoco existe.
+**Alertas para rutas de trabajo — ✅ resuelto en parte (2026-08-25).** `initiatives` ya tiene
+columna `due_date`, editable desde la tarjeta (`<InitiativeDueDate>`) y en el diálogo de alta. Cada
+ruta muestra un chip "Atrasado Xd" / "Vence en Xd" calculado en el cliente (`dueInfo()` en
+`app/rutas/page.tsx`), sin insignia en el menú lateral — eso seguiría el mismo patrón que las
+alertas de SLA de tickets (§11) si se pide más adelante.
 
 ### Limitación de fondo, no planteada aún por el usuario
 
@@ -731,6 +733,54 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 25 de agosto de 2026 (tanda 3) — Fecha límite en rutas, limpieza de esquema, panel por empresa
+
+Cambios pedidos por el usuario después de revisar el registro de pendientes P0–P11: se resolvieron
+P3, P6 y P8; se agregó además el panel de tickets por empresa en el dashboard (pedido aparte).
+
+**1. P3 · Fecha límite en rutas de trabajo**
+- `lib/db.ts`: `initiatives.due_date DATE`, agregada con `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+- `lib/data.ts`: `getInitiatives()` selecciona `i.due_date`; el tipo `Initiative` lo incluye.
+- `app/actions.ts`: `createInitiative` acepta `due_date`; nueva Server Action
+  `updateInitiativeDueDate`.
+- Nuevo componente `components/InitiativeDueDate.tsx` — mismo patrón "auto-enviar al cambiar" que
+  `StatusControl`, guarda con `onChange` + `requestSubmit()`.
+- `components/NewInitiativeDialog.tsx`: campo "Fecha límite" junto a "Responsable" en un `row2`.
+- `app/rutas/page.tsx`: función `dueInfo()` calcula si la ruta está atrasada (`due_date` en el
+  pasado y `status !== 'completado'`) o próxima a vencer (≤ 7 días), y pinta un chip `sla-chip`
+  (reutilizando las clases `crit`/`warn`/`ok` del SLA de tickets) junto al selector de fecha.
+- CSS: `.init-due-row`, `.init-due-form`, `.init-due-input`.
+- **Alcance deliberado:** no se agregó insignia en el menú lateral para rutas atrasadas — el chip
+  vive solo en la tarjeta de la ruta. Ver §12.
+
+**2. P6 · Fórmula de SLA unificada en SQL**
+- `lib/db.ts`: nueva función SQL `ticket_sla_deadline(created_at, sla_hours, priority)`, creada con
+  `CREATE OR REPLACE FUNCTION ... LANGUAGE sql IMMUTABLE` dentro de `ensureSchema()`.
+- `lib/data.ts`: `getAlertCounts()` y `getSupportDashboard()` ahora llaman a
+  `ticket_sla_deadline(...)` en vez de repetir el `CASE t.priority WHEN 'Alta' THEN 0.5 ...` cada
+  una. La fórmula pasa de estar triplicada (TS + 2 sitios SQL) a estar en dos sitios (TS + 1 función
+  SQL) — §5.6.
+- **Sin cambio de comportamiento:** los multiplicadores (`Alta=0.5, Media=1, Baja=1.5`) y el
+  `COALESCE(..., 24)` son exactamente los mismos; solo se movió el cálculo a un solo lugar del lado
+  SQL.
+
+**3. P8 · Limpieza del modelo de priorización P1-P4 (sin uso)**
+- `lib/priority.ts`: eliminados `PRIORITIES`, `Priority`, `PRIORITY_META`, `computeScore`,
+  `levelFor`, `slaForLevel` — verificado que ningún archivo del proyecto los importaba.
+- `lib/db.ts`: eliminada la tabla `services` (`DROP TABLE IF EXISTS`) y las columnas muertas de
+  `tickets` (`urgency`, `impact`, `weight`, `score`, `service_id`, `assignee`, `sla_hours`), todas
+  con `DROP COLUMN IF EXISTS`. La función de semilla `seedCompaniesServices` se renombra a
+  `seedCompanies` y deja de insertar en `services`.
+- `lib/data.ts`: eliminada `getServices()` (sin llamadores).
+- Ejecuta en el primer request contra producción tras el despliegue, dentro del `ensureSchema()`
+  de siempre — no requiere una migración manual aparte.
+
+**4. Panel "Tickets por empresa" en el dashboard**
+- `app/page.tsx`: nuevo panel en la columna 2, debajo de "Estado de tickets" (era el espacio que
+  quedaba más corto que las columnas 1 y 3). Usa `d.byCompany`, que `getSupportDashboard()` ya
+  calculaba pero ningún componente consumía todavía. Reutiliza las clases `.catbars`/`.catbar`, con
+  la barra pintada del color de cada empresa (`c.color`) en vez del verde de marca fijo.
 
 ### 25 de agosto de 2026 (tanda 2) — Consolidación de pendientes
 
@@ -979,7 +1029,7 @@ npm-debug.log*
 
 ### `lib/db.ts`
 
-**El archivo más importante del proyecto.** Conexión a Postgres, `ensureSchema()` idempotente con las 9 tablas, migraciones controladas por la tabla `meta` y las cinco funciones de semilla.
+**El archivo más importante del proyecto.** Conexión a Postgres, `ensureSchema()` idempotente con las 8 tablas activas (la novena, `services`, fue eliminada — ver §5.6bis y §14), migraciones controladas por la tabla `meta`, la función SQL `ticket_sla_deadline()` y las cuatro funciones de semilla.
 
 ```ts
 import { neon } from "@neondatabase/serverless";
@@ -1007,20 +1057,15 @@ async function init(q: NonNullable<typeof sql>) {
   await q`CREATE TABLE IF NOT EXISTS companies (
     id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, slug TEXT, color TEXT
   )`;
-  await q`CREATE TABLE IF NOT EXISTS services (
-    id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, weight NUMERIC NOT NULL, vendor TEXT, sla_hours INT
-  )`;
   await q`CREATE TABLE IF NOT EXISTS tickets (
     id SERIAL PRIMARY KEY,
     title TEXT NOT NULL,
     description TEXT,
     company_id INT REFERENCES companies(id),
-    service_id INT,
     category TEXT,
-    urgency INT, impact INT, weight NUMERIC, score NUMERIC,
     priority TEXT,
     status TEXT NOT NULL DEFAULT 'resuelto',
-    requester TEXT, assignee TEXT, sla_hours INT,
+    requester TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
     resolved_at TIMESTAMPTZ
@@ -1028,6 +1073,7 @@ async function init(q: NonNullable<typeof sql>) {
   await q`CREATE TABLE IF NOT EXISTS initiatives (
     id SERIAL PRIMARY KEY, company_id INT REFERENCES companies(id),
     title TEXT NOT NULL, area TEXT, status TEXT NOT NULL DEFAULT 'planificado', owner TEXT,
+    due_date DATE,
     created_at TIMESTAMPTZ DEFAULT now()
   )`;
   await q`CREATE TABLE IF NOT EXISTS initiative_tasks (
@@ -1058,14 +1104,32 @@ async function init(q: NonNullable<typeof sql>) {
   // Migracion para BD existente (tickets antiguos con columnas NOT NULL)
   await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category TEXT`;
   await q`ALTER TABLE categories ADD COLUMN IF NOT EXISTS sla_hours INT DEFAULT 24`;
-  try { await q`ALTER TABLE tickets ALTER COLUMN urgency DROP NOT NULL`; } catch (e) {}
-  try { await q`ALTER TABLE tickets ALTER COLUMN impact DROP NOT NULL`; } catch (e) {}
-  try { await q`ALTER TABLE tickets ALTER COLUMN weight DROP NOT NULL`; } catch (e) {}
-  try { await q`ALTER TABLE tickets ALTER COLUMN score DROP NOT NULL`; } catch (e) {}
+  await q`ALTER TABLE initiatives ADD COLUMN IF NOT EXISTS due_date DATE`;
   try { await q`ALTER TABLE tickets ALTER COLUMN priority DROP NOT NULL`; } catch (e) {}
 
+  // Limpieza de columnas y tabla del modelo de priorizacion P1-P4, ya sin uso (2026-08-25).
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS urgency`;
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS impact`;
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS weight`;
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS score`;
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS service_id`;
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS assignee`;
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS sla_hours`;
+  await q`DROP TABLE IF EXISTS services`;
+
+  // Formula unica de SLA (antes triplicada: aqui, en getSupportDashboard y en
+  // getAlertCounts). Cambiar los multiplicadores aqui Y en PRIORITY_SLA_MULT
+  // (lib/priority.ts), que es la version usada para pintar cada ticket en el cliente.
+  await q`
+    CREATE OR REPLACE FUNCTION ticket_sla_deadline(p_created_at TIMESTAMPTZ, p_sla_hours INT, p_priority TEXT)
+    RETURNS TIMESTAMPTZ AS $$
+      SELECT p_created_at + (
+        COALESCE(p_sla_hours, 24) * (CASE p_priority WHEN 'Alta' THEN 0.5 WHEN 'Baja' THEN 1.5 ELSE 1 END)
+      ) * INTERVAL '1 hour'
+    $$ LANGUAGE sql IMMUTABLE`;
+
   const c = await q`SELECT COUNT(*)::int AS n FROM companies`;
-  if (c[0].n === 0) await seedCompaniesServices(q);
+  if (c[0].n === 0) await seedCompanies(q);
 
   const i = await q`SELECT COUNT(*)::int AS n FROM initiatives`;
   if (i[0].n === 0) await seedInitiatives(q);
@@ -1111,7 +1175,7 @@ async function init(q: NonNullable<typeof sql>) {
   }
 }
 
-async function seedCompaniesServices(q: NonNullable<typeof sql>) {
+async function seedCompanies(q: NonNullable<typeof sql>) {
   const companies: [string, string, string][] = [
     ["Droppett", "droppett", "#5A6BE0"],
     ["Gilligan", "gilligan", "#2AB6A4"],
@@ -1120,16 +1184,6 @@ async function seedCompaniesServices(q: NonNullable<typeof sql>) {
   ];
   for (const [name, slug, color] of companies) {
     await q`INSERT INTO companies (name, slug, color) VALUES (${name}, ${slug}, ${color}) ON CONFLICT (name) DO NOTHING`;
-  }
-  const services: [string, number, string, number][] = [
-    ["Check Point", 1.5, "Check Point TAC", 8],
-    ["Fortinet", 1.5, "Fortinet Support", 8],
-    ["Deliverect", 1.2, "Deliverect Support", 16],
-    ["Cisco", 1.1, "Cisco TAC", 24],
-    ["SINCO ERP", 1.0, "Soporte SINCO", 48],
-  ];
-  for (const [name, weight, vendor, sla] of services) {
-    await q`INSERT INTO services (name, weight, vendor, sla_hours) VALUES (${name}, ${weight}, ${vendor}, ${sla}) ON CONFLICT (name) DO NOTHING`;
   }
 }
 
@@ -1300,7 +1354,7 @@ async function seedInitiatives(q: NonNullable<typeof sql>) {
 
 ### `lib/data.ts`
 
-Todas las consultas de lectura, ninguna escribe. Incluye `getAlertCounts()` (insignia del menú) y `getSupportDashboard()` (KPI de SLA). **Ambas repiten la fórmula de SLA en SQL** (§5.6).
+Todas las consultas de lectura, ninguna escribe. Incluye `getAlertCounts()` (insignia del menú) y `getSupportDashboard()` (KPI de SLA). **Ambas usan la función SQL `ticket_sla_deadline()`** definida en `ensureSchema()` (§5.6), en vez de repetir el CASE de multiplicadores.
 
 ```ts
 import { sql, ensureSchema } from "./db";
@@ -1308,11 +1362,6 @@ import { sql, ensureSchema } from "./db";
 export async function getCompanies() {
   await ensureSchema();
   return sql!`SELECT id, name, color FROM companies ORDER BY name`;
-}
-
-export async function getServices() {
-  await ensureSchema();
-  return sql!`SELECT id, name, weight, vendor, sla_hours FROM services ORDER BY weight DESC, name`;
 }
 
 export async function getCollaborators() {
@@ -1336,17 +1385,14 @@ export type AlertCounts = {
   dueSoon: number;   // tickets abiertos que vencen en las proximas 2 horas
 };
 
-// Misma formula de SLA que slaInfo() en lib/priority.ts y que el KPI del
-// dashboard: horas de la categoria x multiplicador de prioridad.
-// Si cambias los multiplicadores, cambialos tambien en los otros dos sitios.
+// Misma formula de SLA que slaInfo() en lib/priority.ts, calculada aqui via la
+// funcion SQL ticket_sla_deadline() (definida en ensureSchema, lib/db.ts) para
+// no repetir el CASE de multiplicadores en cada consulta.
 export async function getAlertCounts(): Promise<AlertCounts> {
   await ensureSchema();
   const rows = await sql!`
     WITH abiertos AS (
-      SELECT t.created_at + (
-        COALESCE(cat.sla_hours, 24)
-        * (CASE t.priority WHEN 'Alta' THEN 0.5 WHEN 'Baja' THEN 1.5 ELSE 1 END)
-      ) * interval '1 hour' AS vence
+      SELECT ticket_sla_deadline(t.created_at, cat.sla_hours, t.priority) AS vence
       FROM tickets t
       LEFT JOIN categories cat ON cat.name = t.category
       WHERE t.status <> 'resuelto'
@@ -1425,9 +1471,7 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
       COUNT(*) FILTER (WHERE t.status <> 'resuelto')::int AS open,
       COUNT(*) FILTER (
         WHERE t.status <> 'resuelto'
-          AND now() > t.created_at + (
-            COALESCE(cat.sla_hours, 24) * (CASE t.priority WHEN 'Alta' THEN 0.5 WHEN 'Baja' THEN 1.5 ELSE 1 END)
-          ) * interval '1 hour'
+          AND now() > ticket_sla_deadline(t.created_at, cat.sla_hours, t.priority)
       )::int AS breached,
       MIN(t.created_at) AS minc, MAX(t.created_at) AS maxc
     FROM tickets t
@@ -1495,6 +1539,7 @@ export type Initiative = {
   area: string;
   status: string;
   owner: string | null;
+  due_date: string | null;
   company: string;
   company_color: string;
   tasks: { id: number; title: string; done: boolean }[];
@@ -1507,7 +1552,7 @@ export async function getInitiatives(): Promise<Initiative[]> {
   await ensureSchema();
   const q = sql!;
   const inits = await q`
-    SELECT i.id, i.title, i.area, i.status, i.owner, c.name AS company, c.color AS company_color
+    SELECT i.id, i.title, i.area, i.status, i.owner, i.due_date, c.name AS company, c.color AS company_color
     FROM initiatives i JOIN companies c ON c.id = i.company_id
     ORDER BY c.name, i.id`;
   const tasks = await q`SELECT id, initiative_id, title, done FROM initiative_tasks ORDER BY position, id`;
@@ -1542,22 +1587,9 @@ export async function getInitiativeSummary() {
 
 ### `lib/priority.ts`
 
-Constantes compartidas y el cálculo de SLA en TypeScript: `PRIORITY_SLA_MULT`, `slaInfo()` y `fmtSlaHours()`. Las constantes del modelo P1–P4 antiguo siguen ahí pero ya no se usan.
+Constantes compartidas y el cálculo de SLA en TypeScript: `PRIORITY_SLA_MULT`, `slaInfo()` y `fmtSlaHours()`. Las constantes del modelo P1–P4 antiguo (`PRIORITIES`, `PRIORITY_META`, `computeScore`, `levelFor`, `slaForLevel`) se eliminaron el 2026-08-25 por no tener uso (§14).
 
 ```ts
-// Modelo de priorización — mismo criterio que el playbook del grupo.
-// Score = Urgencia (1-5) x Impacto (1-5) x Peso del servicio (0.9-1.5)
-
-export const PRIORITIES = ["P1", "P2", "P3", "P4"] as const;
-export type Priority = (typeof PRIORITIES)[number];
-
-export const PRIORITY_META: Record<Priority, { name: string; color: string; sla: number }> = {
-  P1: { name: "Crítico", color: "#C0392B", sla: 4 },
-  P2: { name: "Alto", color: "#B4711A", sla: 8 },
-  P3: { name: "Medio", color: "#96820F", sla: 24 },
-  P4: { name: "Bajo", color: "#2F855A", sla: 72 },
-};
-
 export const STATUSES = ["nuevo", "en_progreso", "en_espera", "resuelto"] as const;
 export type Status = (typeof STATUSES)[number];
 
@@ -1594,21 +1626,6 @@ export const INITIATIVE_STATUS_LABEL: Record<InitiativeStatus, string> = {
   en_pausa: "En pausa",
   completado: "Completado",
 };
-
-export function computeScore(urgency: number, impact: number, weight: number): number {
-  return Math.round(urgency * impact * Number(weight) * 10) / 10;
-}
-
-export function levelFor(score: number): Priority {
-  if (score >= 20) return "P1";
-  if (score >= 12) return "P2";
-  if (score >= 6) return "P3";
-  return "P4";
-}
-
-export function slaForLevel(level: Priority): number {
-  return PRIORITY_META[level].sla;
-}
 
 /* ---------- SLA de tickets: por categoria (base) x prioridad (multiplicador) ---------- */
 export const PRIORITY_SLA_MULT: Record<string, number> = { Alta: 0.5, Media: 1, Baja: 1.5 };
@@ -1655,7 +1672,7 @@ export function fmtSlaHours(h: number): string {
 
 ### `app/actions.ts`
 
-Las 24 mutaciones del sistema, todas con el patrón de cinco pasos.
+Las 25 mutaciones del sistema, todas con el patrón de cinco pasos.
 
 ```ts
 "use server";
@@ -1847,11 +1864,12 @@ export async function createInitiative(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   const area = String(formData.get("area") || "");
   const owner = String(formData.get("owner") || "");
+  const due_date = String(formData.get("due_date") || "") || null;
   const tasksRaw = String(formData.get("tasks") || "");
   if (!company_id || !title) return;
 
-  const rows = await sql!`INSERT INTO initiatives (company_id, title, area, status, owner)
-    VALUES (${company_id}, ${title}, ${area}, 'planificado', ${owner}) RETURNING id`;
+  const rows = await sql!`INSERT INTO initiatives (company_id, title, area, status, owner, due_date)
+    VALUES (${company_id}, ${title}, ${area}, 'planificado', ${owner}, ${due_date}) RETURNING id`;
   const id = rows[0].id;
   const tasks = tasksRaw.split("\n").map((t) => t.trim()).filter(Boolean);
   let pos = 0;
@@ -1918,6 +1936,15 @@ export async function updateInitiativeTitle(formData: FormData) {
   await sql!`UPDATE initiatives SET title = ${title} WHERE id = ${id}`;
   revalidatePath("/rutas");
   revalidatePath("/");
+}
+
+export async function updateInitiativeDueDate(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const due_date = String(formData.get("due_date") || "") || null;
+  if (!id) return;
+  await sql!`UPDATE initiatives SET due_date = ${due_date} WHERE id = ${id}`;
+  revalidatePath("/rutas");
 }
 
 export async function deleteInitiative(formData: FormData) {
@@ -2022,7 +2049,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
 ### `app/page.tsx`
 
-Dashboard. `Donut` dibuja las donas en SVG; el texto se centra con flexbox superpuesto, no con `text-anchor`.
+Dashboard. `Donut` dibuja las donas en SVG; el texto se centra con flexbox superpuesto, no con `text-anchor`. Columna 2 incluye el panel **Tickets por empresa** (usa `d.byCompany`, ya calculado por `getSupportDashboard()` pero sin usar hasta el 2026-08-25), con la barra pintada del color de cada empresa.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2078,6 +2105,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
   const closedPct = d.total ? Math.round((d.closed / d.total) * 100) : 0;
   const openPct = 100 - closedPct;
   const maxCat = Math.max(1, ...d.byCategory.map((c) => c.n));
+  const maxCompany = Math.max(1, ...d.byCompany.map((c: any) => c.n));
   const maxDay = Math.max(1, ...d.byDay);
   const topCats = d.byCategory.slice(0, 9);
 
@@ -2183,6 +2211,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                   <div className="lg"><span className="dt" style={{ background: "var(--accent)" }} /> Cerrados <b>{d.closed} ({closedPct}%)</b></div>
                   <div className="lg"><span className="dt" style={{ background: "var(--muted)" }} /> Abiertos <b>{d.open} ({openPct}%)</b></div>
                 </div>
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panel-title">Tickets por empresa</div>
+              <div className="catbars">
+                {d.byCompany.map((c: any) => (
+                  <div className="catbar" key={c.name}>
+                    <div className="cb-top">
+                      <span className="cb-name">{c.name}</span>
+                      <span className="cb-val"><b>{c.n}</b></span>
+                    </div>
+                    <div className="catbar-track">
+                      <div className="catbar-fill" style={{ width: `${(c.n / maxCompany) * 100}%`, background: c.color }} />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -2384,7 +2429,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: Reco
 
 ### `app/rutas/page.tsx`
 
-Rutas de trabajo. Agrupa por empresa y delega en `<InitiativeTitle>` y `<TaskList>`.
+Rutas de trabajo. Agrupa por empresa y delega en `<InitiativeTitle>`, `<InitiativeDueDate>` y `<TaskList>`. `dueInfo()` calcula si la ruta está atrasada o próxima a vencer a partir de `due_date` (columna agregada el 2026-08-25, §14).
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2395,10 +2440,20 @@ import { TaskList } from "@/components/TaskList";
 import { AddTaskForm } from "@/components/AddTaskForm";
 import { InitiativeStatusControl } from "@/components/InitiativeStatusControl";
 import { InitiativeTitle } from "@/components/InitiativeTitle";
+import { InitiativeDueDate } from "@/components/InitiativeDueDate";
 import { DeleteInitiativeButton } from "@/components/DeleteInitiativeButton";
 import { FiltersCompanyClient } from "@/components/FiltersCompanyClient";
 
 export const dynamic = "force-dynamic";
+
+function dueInfo(dueDate: string | null, status: string) {
+  if (!dueDate || status === "completado") return null;
+  const due = new Date(dueDate + "T23:59:59");
+  const diffDays = Math.ceil((due.getTime() - Date.now()) / 86400000);
+  if (diffDays < 0) return { cls: "crit", label: `Atrasado ${Math.abs(diffDays)}d` };
+  if (diffDays <= 7) return { cls: "warn", label: `Vence en ${diffDays}d` };
+  return { cls: "ok", label: `Vence en ${diffDays}d` };
+}
 
 export default async function RutasPage({ searchParams }: { searchParams: Record<string, string> }) {
   if (!hasDb) return <Setup />;
@@ -2449,7 +2504,9 @@ export default async function RutasPage({ searchParams }: { searchParams: Record
                 <span className="mono" style={{ color: "var(--muted)", fontSize: 12 }}>{g.items.length} ruta(s)</span>
               </div>
               <div className="grid g2">
-                {g.items.map((i) => (
+                {g.items.map((i) => {
+                  const due = dueInfo(i.due_date, i.status);
+                  return (
                   <article className="card init-card" key={i.id}>
                     <div className="init-top">
                       <div className="init-head">
@@ -2457,6 +2514,10 @@ export default async function RutasPage({ searchParams }: { searchParams: Record
                         <div className="init-sub">
                           {i.area ? <span className="area-tag">{i.area}</span> : null}
                           {i.owner ? <span className="mono" style={{ color: "var(--muted)" }}> · {i.owner}</span> : null}
+                        </div>
+                        <div className="init-due-row">
+                          <InitiativeDueDate id={i.id} dueDate={i.due_date} />
+                          {due ? <span className={"sla-chip " + due.cls}>{due.label}</span> : null}
                         </div>
                       </div>
                       <div className="init-actions">
@@ -2475,7 +2536,8 @@ export default async function RutasPage({ searchParams }: { searchParams: Record
                     <TaskList initiativeId={i.id} tasks={i.tasks} />
                     <AddTaskForm initiativeId={i.id} />
                   </article>
-                ))}
+                  );
+                })}
               </div>
             </section>
           ))
@@ -3022,6 +3084,11 @@ dialog::backdrop { background: rgba(3,6,10,.65); backdrop-filter: blur(2px); }
 .init-title-input:hover { border-color: var(--line-strong); background: var(--surface-2); }
 .init-title-input:focus { border-color: var(--accent); background: var(--surface-2); outline: none; }
 .area-tag { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .03em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent-wash); padding: 2px 7px; border-radius: 5px; }
+
+/* Fecha limite de la ruta */
+.init-due-row { display: flex; align-items: center; gap: 7px; margin-top: 6px; }
+.init-due-form { margin: 0; }
+.init-due-input { font-family: var(--font-mono); font-size: 11px; padding: 4px 6px; color: var(--ink-soft); }
 
 .init-status { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line-strong); color: var(--ink-soft); background: var(--surface-2); }
 .init-status.planificado { border-color: var(--faint); color: var(--muted); }
@@ -4028,9 +4095,15 @@ export function NewInitiativeDialog({ companies }: { companies: any[] }) {
               <label>Titulo de la ruta *</label>
               <input type="text" name="title" required placeholder="Ej: Aseguramiento perimetral FortiGate" />
             </div>
-            <div className="field">
-              <label>Responsable</label>
-              <input type="text" name="owner" placeholder="Quien lidera" />
+            <div className="row2">
+              <div className="field">
+                <label>Responsable</label>
+                <input type="text" name="owner" placeholder="Quien lidera" />
+              </div>
+              <div className="field">
+                <label>Fecha límite</label>
+                <input type="date" name="due_date" />
+              </div>
             </div>
             <div className="field">
               <label>Tareas (una por linea)</label>
@@ -4047,6 +4120,34 @@ export function NewInitiativeDialog({ companies }: { companies: any[] }) {
         </form>
       </dialog>
     </>
+  );
+}
+```
+
+### `components/InitiativeDueDate.tsx`
+
+Fecha límite de la ruta, guarda al cambiar (mismo patrón "auto-enviar al cambiar" que `StatusControl`). Agregado 2026-08-25 (§14).
+
+```tsx
+"use client";
+
+import { useRef } from "react";
+import { updateInitiativeDueDate } from "@/app/actions";
+
+export function InitiativeDueDate({ id, dueDate }: { id: number; dueDate: string | null }) {
+  const ref = useRef<HTMLFormElement>(null);
+  return (
+    <form ref={ref} action={updateInitiativeDueDate} className="init-due-form">
+      <input type="hidden" name="id" value={id} />
+      <input
+        type="date"
+        name="due_date"
+        defaultValue={dueDate ?? ""}
+        onChange={() => ref.current?.requestSubmit()}
+        className="init-due-input"
+        title="Fecha límite de la ruta"
+      />
+    </form>
   );
 }
 ```

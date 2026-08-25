@@ -5,11 +5,6 @@ export async function getCompanies() {
   return sql!`SELECT id, name, color FROM companies ORDER BY name`;
 }
 
-export async function getServices() {
-  await ensureSchema();
-  return sql!`SELECT id, name, weight, vendor, sla_hours FROM services ORDER BY weight DESC, name`;
-}
-
 export async function getCollaborators() {
   await ensureSchema();
   return sql!`SELECT id, name, company_id FROM collaborators ORDER BY name`;
@@ -31,17 +26,14 @@ export type AlertCounts = {
   dueSoon: number;   // tickets abiertos que vencen en las proximas 2 horas
 };
 
-// Misma formula de SLA que slaInfo() en lib/priority.ts y que el KPI del
-// dashboard: horas de la categoria x multiplicador de prioridad.
-// Si cambias los multiplicadores, cambialos tambien en los otros dos sitios.
+// Misma formula de SLA que slaInfo() en lib/priority.ts, calculada aqui via la
+// funcion SQL ticket_sla_deadline() (definida en ensureSchema, lib/db.ts) para
+// no repetir el CASE de multiplicadores en cada consulta.
 export async function getAlertCounts(): Promise<AlertCounts> {
   await ensureSchema();
   const rows = await sql!`
     WITH abiertos AS (
-      SELECT t.created_at + (
-        COALESCE(cat.sla_hours, 24)
-        * (CASE t.priority WHEN 'Alta' THEN 0.5 WHEN 'Baja' THEN 1.5 ELSE 1 END)
-      ) * interval '1 hour' AS vence
+      SELECT ticket_sla_deadline(t.created_at, cat.sla_hours, t.priority) AS vence
       FROM tickets t
       LEFT JOIN categories cat ON cat.name = t.category
       WHERE t.status <> 'resuelto'
@@ -120,9 +112,7 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
       COUNT(*) FILTER (WHERE t.status <> 'resuelto')::int AS open,
       COUNT(*) FILTER (
         WHERE t.status <> 'resuelto'
-          AND now() > t.created_at + (
-            COALESCE(cat.sla_hours, 24) * (CASE t.priority WHEN 'Alta' THEN 0.5 WHEN 'Baja' THEN 1.5 ELSE 1 END)
-          ) * interval '1 hour'
+          AND now() > ticket_sla_deadline(t.created_at, cat.sla_hours, t.priority)
       )::int AS breached,
       MIN(t.created_at) AS minc, MAX(t.created_at) AS maxc
     FROM tickets t
@@ -190,6 +180,7 @@ export type Initiative = {
   area: string;
   status: string;
   owner: string | null;
+  due_date: string | null;
   company: string;
   company_color: string;
   tasks: { id: number; title: string; done: boolean }[];
@@ -202,7 +193,7 @@ export async function getInitiatives(): Promise<Initiative[]> {
   await ensureSchema();
   const q = sql!;
   const inits = await q`
-    SELECT i.id, i.title, i.area, i.status, i.owner, c.name AS company, c.color AS company_color
+    SELECT i.id, i.title, i.area, i.status, i.owner, i.due_date, c.name AS company, c.color AS company_color
     FROM initiatives i JOIN companies c ON c.id = i.company_id
     ORDER BY c.name, i.id`;
   const tasks = await q`SELECT id, initiative_id, title, done FROM initiative_tasks ORDER BY position, id`;

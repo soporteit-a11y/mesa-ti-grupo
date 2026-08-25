@@ -187,11 +187,12 @@ export async function createInitiative(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   const area = String(formData.get("area") || "");
   const owner = String(formData.get("owner") || "");
+  const due_date = String(formData.get("due_date") || "") || null;
   const tasksRaw = String(formData.get("tasks") || "");
   if (!company_id || !title) return;
 
-  const rows = await sql!`INSERT INTO initiatives (company_id, title, area, status, owner)
-    VALUES (${company_id}, ${title}, ${area}, 'planificado', ${owner}) RETURNING id`;
+  const rows = await sql!`INSERT INTO initiatives (company_id, title, area, status, owner, due_date)
+    VALUES (${company_id}, ${title}, ${area}, 'planificado', ${owner}, ${due_date}) RETURNING id`;
   const id = rows[0].id;
   const tasks = tasksRaw.split("\n").map((t) => t.trim()).filter(Boolean);
   let pos = 0;
@@ -258,6 +259,15 @@ export async function updateInitiativeTitle(formData: FormData) {
   await sql!`UPDATE initiatives SET title = ${title} WHERE id = ${id}`;
   revalidatePath("/rutas");
   revalidatePath("/");
+}
+
+export async function updateInitiativeDueDate(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const due_date = String(formData.get("due_date") || "") || null;
+  if (!id) return;
+  await sql!`UPDATE initiatives SET due_date = ${due_date} WHERE id = ${id}`;
+  revalidatePath("/rutas");
 }
 
 export async function deleteInitiative(formData: FormData) {

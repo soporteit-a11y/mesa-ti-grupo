@@ -23,20 +23,15 @@ async function init(q: NonNullable<typeof sql>) {
   await q`CREATE TABLE IF NOT EXISTS companies (
     id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, slug TEXT, color TEXT
   )`;
-  await q`CREATE TABLE IF NOT EXISTS services (
-    id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, weight NUMERIC NOT NULL, vendor TEXT, sla_hours INT
-  )`;
   await q`CREATE TABLE IF NOT EXISTS tickets (
     id SERIAL PRIMARY KEY,
     title TEXT NOT NULL,
     description TEXT,
     company_id INT REFERENCES companies(id),
-    service_id INT,
     category TEXT,
-    urgency INT, impact INT, weight NUMERIC, score NUMERIC,
     priority TEXT,
     status TEXT NOT NULL DEFAULT 'resuelto',
-    requester TEXT, assignee TEXT, sla_hours INT,
+    requester TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
     resolved_at TIMESTAMPTZ
@@ -44,6 +39,7 @@ async function init(q: NonNullable<typeof sql>) {
   await q`CREATE TABLE IF NOT EXISTS initiatives (
     id SERIAL PRIMARY KEY, company_id INT REFERENCES companies(id),
     title TEXT NOT NULL, area TEXT, status TEXT NOT NULL DEFAULT 'planificado', owner TEXT,
+    due_date DATE,
     created_at TIMESTAMPTZ DEFAULT now()
   )`;
   await q`CREATE TABLE IF NOT EXISTS initiative_tasks (
@@ -74,14 +70,32 @@ async function init(q: NonNullable<typeof sql>) {
   // Migracion para BD existente (tickets antiguos con columnas NOT NULL)
   await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category TEXT`;
   await q`ALTER TABLE categories ADD COLUMN IF NOT EXISTS sla_hours INT DEFAULT 24`;
-  try { await q`ALTER TABLE tickets ALTER COLUMN urgency DROP NOT NULL`; } catch (e) {}
-  try { await q`ALTER TABLE tickets ALTER COLUMN impact DROP NOT NULL`; } catch (e) {}
-  try { await q`ALTER TABLE tickets ALTER COLUMN weight DROP NOT NULL`; } catch (e) {}
-  try { await q`ALTER TABLE tickets ALTER COLUMN score DROP NOT NULL`; } catch (e) {}
+  await q`ALTER TABLE initiatives ADD COLUMN IF NOT EXISTS due_date DATE`;
   try { await q`ALTER TABLE tickets ALTER COLUMN priority DROP NOT NULL`; } catch (e) {}
 
+  // Limpieza de columnas y tabla del modelo de priorizacion P1-P4, ya sin uso (2026-08-25).
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS urgency`;
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS impact`;
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS weight`;
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS score`;
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS service_id`;
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS assignee`;
+  await q`ALTER TABLE tickets DROP COLUMN IF EXISTS sla_hours`;
+  await q`DROP TABLE IF EXISTS services`;
+
+  // Formula unica de SLA (antes triplicada: aqui, en getSupportDashboard y en
+  // getAlertCounts). Cambiar los multiplicadores aqui Y en PRIORITY_SLA_MULT
+  // (lib/priority.ts), que es la version usada para pintar cada ticket en el cliente.
+  await q`
+    CREATE OR REPLACE FUNCTION ticket_sla_deadline(p_created_at TIMESTAMPTZ, p_sla_hours INT, p_priority TEXT)
+    RETURNS TIMESTAMPTZ AS $$
+      SELECT p_created_at + (
+        COALESCE(p_sla_hours, 24) * (CASE p_priority WHEN 'Alta' THEN 0.5 WHEN 'Baja' THEN 1.5 ELSE 1 END)
+      ) * INTERVAL '1 hour'
+    $$ LANGUAGE sql IMMUTABLE`;
+
   const c = await q`SELECT COUNT(*)::int AS n FROM companies`;
-  if (c[0].n === 0) await seedCompaniesServices(q);
+  if (c[0].n === 0) await seedCompanies(q);
 
   const i = await q`SELECT COUNT(*)::int AS n FROM initiatives`;
   if (i[0].n === 0) await seedInitiatives(q);
@@ -127,7 +141,7 @@ async function init(q: NonNullable<typeof sql>) {
   }
 }
 
-async function seedCompaniesServices(q: NonNullable<typeof sql>) {
+async function seedCompanies(q: NonNullable<typeof sql>) {
   const companies: [string, string, string][] = [
     ["Droppett", "droppett", "#5A6BE0"],
     ["Gilligan", "gilligan", "#2AB6A4"],
@@ -136,16 +150,6 @@ async function seedCompaniesServices(q: NonNullable<typeof sql>) {
   ];
   for (const [name, slug, color] of companies) {
     await q`INSERT INTO companies (name, slug, color) VALUES (${name}, ${slug}, ${color}) ON CONFLICT (name) DO NOTHING`;
-  }
-  const services: [string, number, string, number][] = [
-    ["Check Point", 1.5, "Check Point TAC", 8],
-    ["Fortinet", 1.5, "Fortinet Support", 8],
-    ["Deliverect", 1.2, "Deliverect Support", 16],
-    ["Cisco", 1.1, "Cisco TAC", 24],
-    ["SINCO ERP", 1.0, "Soporte SINCO", 48],
-  ];
-  for (const [name, weight, vendor, sla] of services) {
-    await q`INSERT INTO services (name, weight, vendor, sla_hours) VALUES (${name}, ${weight}, ${vendor}, ${sla}) ON CONFLICT (name) DO NOTHING`;
   }
 }
 

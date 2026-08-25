@@ -51,6 +51,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
   const closedPct = d.total ? Math.round((d.closed / d.total) * 100) : 0;
   const openPct = 100 - closedPct;
   const maxCat = Math.max(1, ...d.byCategory.map((c) => c.n));
+  const maxCompany = Math.max(1, ...d.byCompany.map((c: any) => c.n));
   const maxDay = Math.max(1, ...d.byDay);
   const topCats = d.byCategory.slice(0, 9);
 
@@ -156,6 +157,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                   <div className="lg"><span className="dt" style={{ background: "var(--accent)" }} /> Cerrados <b>{d.closed} ({closedPct}%)</b></div>
                   <div className="lg"><span className="dt" style={{ background: "var(--muted)" }} /> Abiertos <b>{d.open} ({openPct}%)</b></div>
                 </div>
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panel-title">Tickets por empresa</div>
+              <div className="catbars">
+                {d.byCompany.map((c: any) => (
+                  <div className="catbar" key={c.name}>
+                    <div className="cb-top">
+                      <span className="cb-name">{c.name}</span>
+                      <span className="cb-val"><b>{c.n}</b></span>
+                    </div>
+                    <div className="catbar-track">
+                      <div className="catbar-fill" style={{ width: `${(c.n / maxCompany) * 100}%`, background: c.color }} />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

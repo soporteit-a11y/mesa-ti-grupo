@@ -1,16 +1,3 @@
-// Modelo de priorización — mismo criterio que el playbook del grupo.
-// Score = Urgencia (1-5) x Impacto (1-5) x Peso del servicio (0.9-1.5)
-
-export const PRIORITIES = ["P1", "P2", "P3", "P4"] as const;
-export type Priority = (typeof PRIORITIES)[number];
-
-export const PRIORITY_META: Record<Priority, { name: string; color: string; sla: number }> = {
-  P1: { name: "Crítico", color: "#C0392B", sla: 4 },
-  P2: { name: "Alto", color: "#B4711A", sla: 8 },
-  P3: { name: "Medio", color: "#96820F", sla: 24 },
-  P4: { name: "Bajo", color: "#2F855A", sla: 72 },
-};
-
 export const STATUSES = ["nuevo", "en_progreso", "en_espera", "resuelto"] as const;
 export type Status = (typeof STATUSES)[number];
 
@@ -47,21 +34,6 @@ export const INITIATIVE_STATUS_LABEL: Record<InitiativeStatus, string> = {
   en_pausa: "En pausa",
   completado: "Completado",
 };
-
-export function computeScore(urgency: number, impact: number, weight: number): number {
-  return Math.round(urgency * impact * Number(weight) * 10) / 10;
-}
-
-export function levelFor(score: number): Priority {
-  if (score >= 20) return "P1";
-  if (score >= 12) return "P2";
-  if (score >= 6) return "P3";
-  return "P4";
-}
-
-export function slaForLevel(level: Priority): number {
-  return PRIORITY_META[level].sla;
-}
 
 /* ---------- SLA de tickets: por categoria (base) x prioridad (multiplicador) ---------- */
 export const PRIORITY_SLA_MULT: Record<string, number> = { Alta: 0.5, Media: 1, Baja: 1.5 };
