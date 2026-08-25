@@ -381,7 +381,9 @@ Todos los colores son variables CSS declaradas una sola vez en `:root` de `app/g
 
 ### Anchos y layout
 
-- Barra lateral fija de `244px` (`--sidebar-w`), contenido con `max-width: 1320px`.
+- Barra lateral fija de `244px` (`--sidebar-w`), contenido con `max-width: 1320px` y
+  `margin: 0 auto` (agregado 2026-08-25, §14) para que se centre en vez de pegarse a la izquierda
+  en monitores anchos — sin esto quedaba mucho espacio muerto a la derecha en pantallas grandes.
 - Radios: `--radius: 12px` en tarjetas, `--radius-sm: 7px` en campos.
 
 ### Sistema responsive
@@ -733,6 +735,14 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 25 de agosto de 2026 (tanda 4) — Centrar el contenido en pantallas anchas
+
+- `app/globals.css`: `.content` gana `margin: 0 auto`. El usuario reportó (con captura) que en
+  monitores anchos el contenido quedaba pegado a la izquierda, dejando una franja vacía enorme a
+  la derecha — `.content` tiene `max-width: 1320px` pero `.main` (flex column) no centraba un
+  hijo más angosto que el contenedor por defecto. Con el margen automático, el bloque se centra
+  en el espacio disponible junto al sidebar en vez de quedar pegado a un lado.
 
 ### 25 de agosto de 2026 (tanda 3) — Fecha límite en rutas, limpieza de esquema, panel por empresa
 
@@ -2831,7 +2841,7 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 .topbar h1 { font-size: 1.15rem; font-weight: 680; }
 .topbar .sub { font-size: 12.5px; color: var(--muted); font-family: var(--font-mono); }
 .topbar .push { margin-left: auto; display: flex; gap: 10px; align-items: center; }
-.content { padding: 24px 28px 60px; max-width: 1320px; width: 100%; }
+.content { padding: 24px 28px 60px; max-width: 1320px; width: 100%; margin: 0 auto; }
 
 @media (max-width: 820px) {
   .app { grid-template-columns: 1fr; }
