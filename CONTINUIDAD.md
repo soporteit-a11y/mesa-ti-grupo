@@ -8,6 +8,11 @@
 >
 > **Última sesión:** 25 de agosto de 2026
 > **Estado del sistema:** en producción, funcionando, sin incidencias abiertas.
+>
+> ### 👉 ¿Buscas qué hay que hacer? Está todo en **§3.bis · TODO LO PENDIENTE**
+> Doce puntos numerados de P0 a P11, ordenados por prioridad. Nada de eso bloquea el
+> funcionamiento actual, pero **P0 (volcado de la base de datos) debe hacerse antes de
+> cualquier cambio de cuenta**: es lo único irrecuperable.
 
 ---
 
@@ -102,31 +107,124 @@ El código está desplegado y su CSS también, pero ahora mismo el sistema tiene
 abiertos**, así que la insignia correctamente no muestra nada. El problema es que un `0` legítimo
 y un `0` causado por un fallo de la consulta se ven exactamente igual.
 
-En la última sesión se añadió un `console.error` en `app/layout.tsx` para que un fallo futuro
-quede registrado en los logs de Vercel en vez de pasar en silencio. **Ese cambio está en disco pero
-puede que no se haya llegado a desplegar** — comprueba `git status` al arrancar.
+Ya se añadió un `console.error` en `app/layout.tsx` (commit `6519a95`, desplegado) para que un
+fallo futuro quede registrado en los logs de Vercel en vez de pasar en silencio. Pero eso solo
+sirve de aquí en adelante: **la consulta sigue sin probarse con datos que disparen la alerta.**
 
-**Cómo terminar de verificarlo** (es reversible y de un solo campo):
+Cómo terminar de verificarlo está en el pendiente **P1** de la sección siguiente.
+
+---
+
+## 3.bis · TODO LO PENDIENTE
+
+> Esta es **la lista completa**. El usuario pidió expresamente dejarlo todo aquí antes de cambiar
+> de cuenta. Si algo hay que hacer en este proyecto, está en esta sección.
+> Nada de esto bloquea el funcionamiento actual: el sistema está en producción y operativo.
+
+### 🔴 Antes de cambiar de cuenta — hazlo primero
+
+**P0 · Volcado de la base de datos.**
+Es lo único verdaderamente irrecuperable. El repositorio **no** contiene los datos reales (§6):
+si se pierde el acceso a Neon sin haber volcado, se pierden los ~84 tickets, los 17 colaboradores
+y el historial completo.
+
+```bash
+# Cadena de conexión: Vercel → mesa-ti-grupo → Storage → Postgres → .env.local
+pg_dump "postgresql://usuario:clave@host/basedatos?sslmode=require" > respaldo-mesa-ti.sql
+```
+
+Guárdalo fuera de Vercel y fuera de la máquina.
+
+**P0b · Confirmar accesos que sobreviven al cambio.**
+- Repositorio GitHub `soporteit-a11y/mesa-ti-grupo` — la cuenta es del usuario, no de Claude ✅
+- Proyecto Vercel `mesa-ti-grupo`, equipo `helpdesk10` — también del usuario ✅
+- Base Neon — se administra desde el panel de Vercel ✅
+
+Nada de esto depende de la cuenta de Claude, así que el cambio no debería afectarlos. Conviene
+comprobarlo igualmente.
+
+### 🟠 Verificación pendiente
+
+**P1 · Probar el contador de avisos de SLA con datos reales.**
+Prueba reversible, de un solo campo:
 
 1. En `/tickets`, coge cualquier ticket antiguo ya cerrado
 2. Cambia su estado a **En progreso** con el selector de la última columna
-3. Al ser antiguo, su fecha límite ya pasó → debe aparecer una **insignia roja** junto a
+3. Al ser antiguo, su fecha límite ya pasó → deben aparecer una **insignia roja** junto a
    "Mesa de ayuda" y una **franja roja** arriba de la bandeja
-4. Devuélvelo a **Resuelto**
+4. Devuélvelo a **Resuelto** y comprueba que ambas desaparecen
 
-El usuario fue informado de esta prueba y no llegó a autorizarla explícitamente, así que
-**pregúntale antes de tocar sus datos**.
+Si no aparecen, mira los logs de Vercel buscando `[avisos SLA]`.
+**Pregunta al usuario antes de hacerlo:** implica tocar uno de sus tickets reales.
 
-### Pendientes que él conoce y no ha pedido aún
+### 🟡 Funciones no implementadas
 
-- **Alertas nivel 2** (resumen diario por correo con Vercel Cron + Resend). Limitación real: el
-  plan Hobby solo permite cron diario.
-- **Alertas para rutas de trabajo**: hoy imposible por fecha, porque `initiatives` no tiene columna
-  de vencimiento. Habría que añadir `due_date` primero.
-- **El sitio no tiene autenticación.** Cualquiera con la URL lee y modifica todo. Hoy es tolerable
-  porque lo usa una sola persona, pero si entra más gente hay que resolverlo antes.
-- **La fórmula de SLA está repetida en tres sitios** (§5.6 del handoff). Es la deuda técnica más
-  propensa a causar incoherencias.
+**P2 · Alertas nivel 2 — resumen diario por correo.**
+Vercel Cron (`vercel.json`) llamando a un endpoint `/api/cron/alertas`, con Resend para enviar
+(capa gratuita: 3.000 correos/mes). Sería el primer `/api/` del proyecto.
+*Limitación real: el plan Hobby de Vercel solo permite cron **diario**. Para avisos por hora hace
+falta Pro (20 USD/mes).* Estimación: ~3 h. Requiere API key de Resend.
+
+**P3 · Alertas para rutas de trabajo.**
+**Hoy es imposible por fecha:** `initiatives` no tiene columna de vencimiento. Hay dos caminos:
+- Añadir `due_date` a `initiatives`, más su campo en el diálogo de alta y en la tarjeta
+- O basar el aviso en inactividad ("ninguna tarea completada en 30 días"), que también requiere
+  una columna de fecha en `initiative_tasks`, que tampoco existe
+
+Cualquiera de los dos empieza por una migración de esquema en `ensureSchema()` (§5.5 del handoff).
+
+**P4 · Alertas nivel 3 — tiempo real.**
+WebSockets o push del navegador. **Desproporcionado** para un sistema de un solo usuario.
+Documentado para descartarlo con criterio, no para hacerlo.
+
+### 🟡 Seguridad
+
+**P5 · El sitio no tiene autenticación.**
+Cualquiera con la URL lee y modifica todo: tickets, configuración, rutas. Hoy es tolerable porque
+lo usa una sola persona y la URL no está publicada. **Si algún día entra más gente del grupo, hay
+que resolverlo antes.** Vercel Password Protection es de pago; alternativas gratuitas: Auth.js o
+un middleware con Basic Auth.
+
+### 🔵 Deuda técnica (nada urgente, todo conocido)
+
+**P6 · La fórmula de SLA está repetida en tres sitios.**
+`slaInfo()` en `lib/priority.ts`, el KPI de `getSupportDashboard()` y el CTE de `getAlertCounts()`
+(§5.6 del handoff). Si alguien cambia los multiplicadores en uno solo, el sistema empieza a dar
+cifras contradictorias. Unificarlo sería una mejora real.
+
+**P7 · `tickets.category` es texto libre, no clave foránea.**
+Se une con `categories` por nombre. Si el usuario **renombra** una categoría en `/config`, los
+tickets antiguos quedan huérfanos y su SLA cae al valor por defecto de 24 h vía `COALESCE`.
+Ya pasó una vez: "Flota (Tablets)" hoy se llama "Flota - Tablets / Celulares".
+
+**P8 · Columnas y tabla muertas.**
+`urgency`, `impact`, `weight`, `score`, `service_id`, `assignee` y `tickets.sla_hours` sobran, más
+la tabla `services` entera. Son restos de un modelo de priorización P1–P4 anterior. También siguen
+en `lib/priority.ts` las constantes `PRIORITIES`, `PRIORITY_META`, `computeScore`, `levelFor` y
+`slaForLevel`, ya sin uso. Limpiarlo requiere confirmar que nada las importa.
+
+### ⚪ Higiene del entorno
+
+**P9 · Repositorio git accidental en el directorio de usuario.**
+Existe un `.git` en `C:\Users\Diomelvis`. **Verificado: tiene 0 archivos rastreados**, así que
+nada sensible está versionado y el riesgo real es bajo. Pero un `git add -A` ejecutado por error
+desde esa carpeta prepararía todo el perfil del usuario, incluido `.ssh`. Conviene eliminarlo:
+
+```bash
+# Comprobar primero que sigue vacío:
+cd /c/Users/Diomelvis && git ls-files | wc -l   # debe dar 0
+# Y entonces:
+rm -rf /c/Users/Diomelvis/.git
+```
+
+**P10 · Correo de los commits distinto al de la cuenta de GitHub.**
+Los commits van firmados como `evargas@droppett.io`, pero el git global usa
+`diomelvis.manzueta04@gmail.com`. Los commits no aparecen enlazados al perfil de GitHub. No afecta
+al funcionamiento; se arregla añadiendo `evargas@droppett.io` en GitHub → Settings → Emails.
+
+**P11 · Vercel CLI instalado sin sesión.**
+Está globalmente en la máquina como plan B (`vercel login` → `vercel --prod`). No hace falta
+mientras git funcione. Se documenta para que nadie lo confunda con algo roto.
 
 ---
 
@@ -247,14 +345,19 @@ verdaderamente irrecuperable si algo sale mal.
 
 ## 7. Lista de traspaso
 
-Si vas a mover el proyecto a otra cuenta, comprueba estos puntos:
+Antes de mover el proyecto a otra cuenta:
 
-- [ ] **Volcado de la base de datos** hecho y guardado fuera de Vercel (§6)
+- [ ] **P0 · Volcado de la base de datos** hecho y guardado fuera de Vercel (§3.bis y §6)
 - [ ] Acceso al repositorio `soporteit-a11y/mesa-ti-grupo` en GitHub
-- [ ] Acceso a la cuenta de Vercel (equipo `helpdesk10`) — o transferir el proyecto
+- [ ] Acceso a la cuenta de Vercel (equipo `helpdesk10`)
 - [ ] Acceso a la base Neon, que se administra desde el panel de Vercel
 - [ ] `HANDOFF.md` y este documento copiados
-- [ ] Verificado que `git status` está limpio y sincronizado antes de mover nada
+- [ ] `git status` limpio y sincronizado antes de mover nada
+
+**Lo importante:** ninguno de esos accesos pertenece a la cuenta de Claude. El repositorio es del
+usuario, el proyecto de Vercel es del usuario y la base también. **Cambiar de cuenta de Claude no
+pone en riesgo nada de eso.** Lo único que se pierde es la memoria de la conversación, y para eso
+existen exactamente estos dos documentos.
 
 **Sobre cambiar de cuenta de Claude en concreto:** los archivos viven en el disco del usuario, no
 en la cuenta. Una sesión nueva en la misma carpeta los ve igual. Lo único que se pierde es la
@@ -266,11 +369,17 @@ memoria de la conversación — y para eso existen exactamente estos dos documen
 
 Cuando retomes, no empieces a programar. Haz esto:
 
-1. Comprueba producción y `git status` (§1)
-2. Confirma si el `console.error` de `app/layout.tsx` está desplegado o pendiente (§3)
-3. Pregúntale si quiere que se termine de verificar el contador de avisos (§3), porque implica
-   tocar un ticket suyo
-4. Pregunta qué quiere hacer a continuación
+1. **Comprueba producción y `git status`** (§1). Si las cuatro rutas dan 200 y la rama está
+   sincronizada, no hay nada roto ni nada a medio desplegar.
+2. **Lee §3.bis · TODO LO PENDIENTE** para saber qué hay sobre la mesa.
+3. **Recuérdale P0** si va a cambiar de cuenta o de máquina: el volcado de la base de datos es lo
+   único irrecuperable.
+4. **Pregúntale qué quiere hacer.** No des por hecho que quiere seguir por el pendiente con el
+   número más bajo: la numeración es de prioridad técnica, no de sus ganas.
 
-Y recuerda la regla que más le importa: **cada cambio va acompañado de su actualización en
-`HANDOFF.md`, en el mismo commit.**
+Dos cosas que **no** debes hacer sin preguntar:
+- Tocar sus tickets, categorías o rutas reales, aunque sea para probar algo (ver P1)
+- Cambiar el valor de `tickets_seed` en `lib/db.ts` — borraría todos sus tickets (§5.6)
+
+Y la regla que más le importa: **cada cambio va acompañado de su actualización en `HANDOFF.md`,
+en el mismo commit.**

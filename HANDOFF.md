@@ -669,6 +669,9 @@ asociadas — `deleteCompany` cuenta las tres cosas y sale sin hacer nada si enc
 
 ## 12. Trabajo pendiente
 
+> **La lista completa y priorizada está en `CONTINUIDAD.md`, sección §3.bis** (P0 a P11).
+> Aquí queda el detalle técnico de los puntos relacionados con alertas y seguridad.
+
 ### Alertas — siguientes niveles
 
 El **Nivel 1 está implementado** (insignia en el menú + franja en la bandeja, §11). Quedan dos
@@ -729,7 +732,19 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
-### 25 de agosto de 2026 — Documento de continuidad
+### 25 de agosto de 2026 (tanda 2) — Consolidación de pendientes
+
+- `CONTINUIDAD.md` gana la sección **§3.bis · TODO LO PENDIENTE**: los 13 puntos abiertos del
+  proyecto (P0–P11) en un solo sitio, ordenados por prioridad y con su motivo, su coste estimado
+  y sus limitaciones reales. Petición del usuario antes de cambiar de cuenta.
+- Se enlaza desde la cabecera del documento, desde la lista de traspaso (§7) y desde §12 del
+  handoff, para que sea imposible pasarla por alto.
+- **Corrección de un dato que se había dado mal:** el repositorio git accidental de
+  `C:\Users\Diomelvis` se describió antes como un riesgo de tener `.ssh` versionado. Comprobado:
+  tiene **0 archivos rastreados**, nada llegó a commitearse. El riesgo real es solo latente (un
+  `git add -A` ejecutado ahí por error). Queda como P9.
+
+### 25 de agosto de 2026 (tanda 1) — Documento de continuidad
 
 - Nuevo **`CONTINUIDAD.md`**: punto de entrada para retomar el proyecto desde otra cuenta o con
   otra IA. Recoge lo que este documento no cubre: las reglas de trabajo que puso el usuario, el
