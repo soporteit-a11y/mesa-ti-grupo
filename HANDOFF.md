@@ -427,12 +427,18 @@ helpdesk/
 │
 ├── app/
 │   ├── layout.tsx            # shell: barra lateral + <main>; exporta metadata y viewport
-│   ├── globals.css           # TODO el CSS del proyecto (379 líneas)
-│   ├── actions.ts            # TODAS las Server Actions (23 funciones)
+│   ├── icon.png              # favicon (convención Next.js App Router), logo de Droppett
+│   ├── globals.css           # TODO el CSS del proyecto
+│   ├── actions.ts            # TODAS las Server Actions (25 funciones)
 │   ├── page.tsx              # Dashboard
 │   ├── tickets/page.tsx      # Mesa de ayuda
 │   ├── rutas/page.tsx        # Rutas de trabajo
 │   └── config/page.tsx       # Configuración
+│
+├── public/                   # assets estáticos (agregado 2026-08-26)
+│   ├── droppett-logo.png       # logo completo (ícono + wordmark), trazo blanco, sin usar aún
+│   ├── droppett-icon.png       # solo el ícono (wifi+nube), trazo negro
+│   └── droppett-icon-white.png # solo el ícono, trazo blanco — el que usa el sidebar
 │
 ├── lib/
 │   ├── db.ts                 # conexión + ensureSchema() + semillas
@@ -462,7 +468,7 @@ helpdesk/
     └── AddTaskForm.tsx             # input "+ Agregar tarea"
 ```
 
-**35 archivos** sin contar `node_modules`, `.next` ni `package-lock.json`.
+**39 archivos** sin contar `node_modules`, `.next` ni `package-lock.json`.
 
 ---
 
@@ -735,6 +741,34 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 26 de agosto de 2026 — Logo real de Droppett (sidebar + favicon)
+
+- El usuario pegó una captura del logo de Droppett (ícono de wifi + nube, wordmark "DROPPETT"),
+  pero la imagen tenía de fondo el papel rayado de la app de origen y las marcas de selección
+  (handles) alrededor, así que no era usable directamente.
+- **Limpieza de la imagen:** sin herramientas de edición de imágenes instaladas en la máquina
+  (no hay ImageMagick ni Python/Pillow), se procesó en el navegador con un `<canvas>`: se
+  clasificó cada píxel como "tinta" (oscuro y neutro, sin saturación) o fondo, se agruparon los
+  píxeles de tinta en componentes conexas y se descartaron las componentes pequeñas (los handles
+  de selección, que quedan aislados del trazo real del logo). Con eso se generaron cuatro
+  variantes: ícono solo / logo completo (ícono+wordmark), cada uno en negro y en blanco.
+- **Assets nuevos en `public/`** (carpeta creada en este cambio): `droppett-logo.png` (completo,
+  blanco), `droppett-icon.png` (solo ícono, negro) y `droppett-icon-white.png` (solo ícono,
+  blanco — el que se usa en el sidebar, porque un trazo negro es invisible sobre el navy oscuro
+  de fondo).
+- `app/layout.tsx`: el badge cuadrado del sidebar (antes texto "TI" sobre fondo verde) ahora
+  muestra `droppett-icon-white.png`. Se mantiene el texto "MESA TI / Grupo empresarial" al lado —
+  no se reemplazó, porque esta herramienta sirve a las cuatro empresas del grupo, no solo a
+  Droppett.
+- `app/globals.css`: `.brand .logo` pasa de estilos de texto (`font-family`, `color`, etc., para
+  las letras "TI") a estilos de imagen (`object-fit: contain`, `padding`), conservando el fondo
+  verde y el halo (`box-shadow`) del badge original.
+- `app/icon.png`: nuevo archivo (convención de Next.js App Router — cualquier `icon.png` dentro de
+  `app/` se sirve automáticamente como favicon). Usa la variante negra del ícono, porque la
+  mayoría de navegadores muestran la pestaña sobre fondo claro por defecto.
+- Verificado en local (`npm run dev`): el badge se ve correctamente en el sidebar y
+  `<link rel="icon" href="/icon.png">` aparece en el `<head>` servido.
 
 ### 25 de agosto de 2026 (tanda 4) — Centrar el contenido en pantallas anchas
 
@@ -1984,7 +2018,7 @@ export async function reorderTasks(formData: FormData) {
 
 ### `app/layout.tsx`
 
-Shell de la aplicación. **Server Component asíncrono**: consulta `getAlertCounts()` para la insignia, con guarda `hasDb` + `try/catch` que **registra el error** en lugar de silenciarlo. Exporta `metadata` y `viewport`.
+Shell de la aplicación. **Server Component asíncrono**: consulta `getAlertCounts()` para la insignia, con guarda `hasDb` + `try/catch` que **registra el error** en lugar de silenciarlo. Exporta `metadata` y `viewport`. El badge cuadrado del sidebar (antes texto "TI") usa el logo real de Droppett (`public/droppett-icon-white.png`) desde el 2026-08-26 — ver §14 y §9 (assets en `public/` y `app/icon.png` para el favicon).
 
 ```tsx
 import "./globals.css";
@@ -2025,7 +2059,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <div className="app">
           <aside className="sidebar">
             <div className="brand">
-              <div className="logo">TI</div>
+              <img src="/droppett-icon-white.png" alt="Droppett" className="logo" />
               <div>
                 <div className="bt">MESA&nbsp;TI</div>
                 <div className="bs">Grupo empresarial</div>
@@ -2782,7 +2816,7 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
   padding: 20px 14px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 6px;
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 18px; }
-.brand .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: #0A0E15; font-family: var(--font-mono); font-weight: 700; font-size: 15px; box-shadow: 0 0 0 3px var(--accent-wash); }
+.brand .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); object-fit: contain; padding: 5px; box-sizing: border-box; }
 .brand .bt { font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: .02em; line-height: 1.1; }
 .brand .bs { font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); letter-spacing: .04em; }
 .nav-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); padding: 14px 10px 6px; }

@@ -49,7 +49,7 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
   padding: 20px 14px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 6px;
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 18px; }
-.brand .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: #0A0E15; font-family: var(--font-mono); font-weight: 700; font-size: 15px; box-shadow: 0 0 0 3px var(--accent-wash); }
+.brand .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); object-fit: contain; padding: 5px; box-sizing: border-box; }
 .brand .bt { font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: .02em; line-height: 1.1; }
 .brand .bs { font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); letter-spacing: .04em; }
 .nav-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); padding: 14px 10px 6px; }

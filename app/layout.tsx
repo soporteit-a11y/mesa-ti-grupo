@@ -36,7 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <div className="app">
           <aside className="sidebar">
             <div className="brand">
-              <div className="logo">TI</div>
+              <img src="/droppett-icon-white.png" alt="Droppett" className="logo" />
               <div>
                 <div className="bt">MESA&nbsp;TI</div>
                 <div className="bs">Grupo empresarial</div>
