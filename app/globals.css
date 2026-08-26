@@ -128,6 +128,7 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #0A0E15; font-weight: 700; }
 .btn.primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
 .btn.sm { padding: 6px 10px; font-size: 12.5px; }
+.btn.active { background: var(--accent); border-color: var(--accent); color: #0A0E15; font-weight: 700; }
 
 /* ---------- Cards / grids ---------- */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
@@ -152,6 +153,8 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 .report-head .rh-title { font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 800; letter-spacing: -.02em; }
 .report-head .rh-period { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); margin-top: 8px; display: flex; align-items: center; gap: 8px; }
 .report-head .rh-period b { color: var(--accent-ink); }
+.daterange-wrap { display: flex; flex-direction: column; gap: 10px; }
+.dr-presets { display: flex; gap: 8px; flex-wrap: wrap; }
 .daterange { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
 .daterange label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
 .daterange input[type=date] { font-family: var(--font-sans); font-size: 13px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 10px; color-scheme: dark; cursor: pointer; }

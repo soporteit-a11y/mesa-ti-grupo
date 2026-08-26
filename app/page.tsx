@@ -14,6 +14,10 @@ function fmtPeriod(min: string | null, max: string | null) {
   const f = (d: Date) => `${d.getUTCDate()} ${MESES[d.getUTCMonth()]}`;
   return `${f(a)} – ${f(b)} ${b.getUTCFullYear()}`;
 }
+function fmtYMD(s: string) {
+  const [y, m, d] = s.split("-").map(Number);
+  return `${d} ${MESES[m - 1]} ${y}`;
+}
 function fmtDate(iso: string) {
   const d = new Date(iso);
   const p = (n: number) => String(n).padStart(2, "0");
@@ -48,6 +52,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
     return <Setup />;
   }
 
+  const periodLabel = (from || to)
+    ? `${from ? fmtYMD(from) : "inicio"} – ${to ? fmtYMD(to) : "hoy"}`
+    : "Todo el historial";
+
   const closedPct = d.total ? Math.round((d.closed / d.total) * 100) : 0;
   const openPct = 100 - closedPct;
   const maxCat = Math.max(1, ...d.byCategory.map((c) => c.n));
@@ -62,7 +70,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
         <div className="report-head">
           <div>
             <div className="rh-title">RESUMEN DE TICKETS DE SOPORTE</div>
-            <div className="rh-period">📅 PERIODO: <b>{fmtPeriod(d.minDate, d.maxDate)}</b></div>
+            <div className="rh-period">📅 PERIODO: <b>{periodLabel}</b></div>
             <div style={{ marginTop: 12 }}><DateRangeFilter /></div>
           </div>
           <div className="stat-cards">
@@ -206,7 +214,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
               <div className="panel-title">Resumen</div>
               <div className="resumen-lead">
                 <div className="ri"><svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></svg></div>
-                <p>Todos los tickets del período {fmtPeriod(d.minDate, d.maxDate)} fueron atendidos y cerrados satisfactoriamente.</p>
+                <p>
+                  {d.total === 0
+                    ? "No hay tickets registrados en este período."
+                    : `Todos los tickets del período ${fmtPeriod(d.minDate, d.maxDate)} fueron atendidos y cerrados satisfactoriamente.`}
+                </p>
               </div>
               <div className="resumen-item"><div className="ri"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6 9 17l-5-5" /></svg></div><div><div className="rt">Eficiencia</div><div className="rd">{closedPct}% de tickets cerrados</div></div></div>
               <div className="resumen-item"><div className="ri"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg></div><div><div className="rt">Respuesta oportuna</div><div className="rd">Atención rápida y efectiva</div></div></div>

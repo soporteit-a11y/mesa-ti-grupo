@@ -13,9 +13,8 @@
 > ya descubiertas.
 >
 > **Fecha del traspaso:** 24 de agosto de 2026
-> **Última actualización:** 25 de agosto de 2026 — fecha límite en rutas de trabajo, fórmula de
-> SLA unificada en una función SQL, limpieza del modelo de priorización P1-P4 (tabla `services` y
-> columnas muertas de `tickets`) y panel de tickets por empresa en el dashboard. Ver §14.
+> **Última actualización:** 26 de agosto de 2026 — logo real de Droppett en sidebar y favicon,
+> y presets de período (Hoy/3 días/1 semana/1 mes/personalizado) en el dashboard. Ver §14.
 > **Estado:** en producción y en uso real.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
@@ -623,6 +622,21 @@ El filtro de rango de fechas (`?from=`/`?to=`) afecta a **todas** las consultas 
 Nota de implementación: el filtro `to` es inclusivo — internamente se compara con
 `< to + interval '1 day'`.
 
+**Presets de período** (agregado 2026-08-26, `<DateRangeFilter>`): botones **Todo / Hoy / 3 días /
+1 semana / 1 mes**, más los campos manuales **Desde/Hasta** de siempre para un rango
+personalizado. Los presets calculan la fecha con `new Date()` **en el cliente** (por eso "Hoy"
+avanza solo, día a día, sin tocar el servidor) y solo hacen `set("from"/"to")` sobre los mismos
+parámetros de URL — no hay estado nuevo, ni ruta nueva.
+
+El texto "📅 PERIODO" del encabezado **ya no muestra el rango de fechas de los tickets
+existentes** (`d.minDate`/`d.maxDate`); antes de este cambio mostraba el mínimo/máximo real de
+`created_at` entre los tickets, lo que el usuario veía como "estático" porque solo avanzaba
+cuando entraba un ticket nuevo. Ahora `periodLabel` en `app/page.tsx` refleja el **filtro
+seleccionado**: "Todo el historial" sin filtro, o las fechas exactas de `from`/`to` con
+`fmtYMD()` cuando hay uno activo. `fmtPeriod(d.minDate, d.maxDate)` se sigue usando, pero solo
+para la frase del panel "Resumen" (que sí describe los datos, no el filtro) — y esa frase ahora
+se oculta si `d.total === 0` (período sin tickets, ej. "Hoy" antes de que entre el primero).
+
 Las donas se dibujan con dos `<circle>` SVG y `stroke-dasharray`; el texto va centrado con
 flexbox sobre el SVG (`position:absolute; inset:0`), no con `text-anchor` — esto se corrigió
 dos veces, no lo cambies a coordenadas SVG.
@@ -742,7 +756,31 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
-### 26 de agosto de 2026 — Logo real de Droppett (sidebar + favicon)
+### 26 de agosto de 2026 (tanda 2) — Presets de período en el dashboard
+
+**Motivo del usuario:** el texto "📅 PERIODO" mostraba el mínimo/máximo real de `created_at`
+entre los tickets (ej. "25 MAY – 25 AGO 2026"), que solo avanzaba cuando entraba un ticket nuevo
+— lo percibía como "estático" y quería que reflejara un período que él elige, no los datos.
+
+- `components/DateRangeFilter.tsx`: nuevos botones de preset **Todo / Hoy / 3 días / 1 semana /
+  1 mes**, calculados con `new Date()` en el cliente (por eso "Hoy" avanza solo, sin tocar el
+  servidor). Los campos manuales **Desde/Hasta** de siempre siguen ahí para un rango
+  personalizado — no hubo que agregar un modo "personalizado" aparte, editar esos campos ya lo es.
+  Internamente siguen siendo los mismos parámetros de URL `?from=&to=`, sin estado nuevo.
+- `app/page.tsx`: nuevo `periodLabel` — muestra "Todo el historial" sin filtro, o las fechas
+  exactas del filtro activo (`fmtYMD()`) cuando hay uno. Reemplaza el uso de
+  `fmtPeriod(d.minDate, d.maxDate)` en el encabezado (esa función se conserva, pero solo para la
+  frase del panel "Resumen", que sí describe los datos filtrados).
+- `app/page.tsx`: la frase "Todos los tickets del período ... fueron atendidos" se oculta si
+  `d.total === 0` (ej. al filtrar "Hoy" antes de que entre el primer ticket del día) y se
+  reemplaza por "No hay tickets registrados en este período."
+- `app/globals.css`: `.daterange-wrap`, `.dr-presets` y `.btn.active` (botón de preset resaltado
+  en verde cuando coincide con el `from`/`to` actual de la URL).
+- **No se cambió el comportamiento por defecto:** sin filtro, el dashboard sigue mostrando todo
+  el historial (88 tickets), igual que antes — no se forzó "Hoy" como default porque eso ocultaría
+  el resumen general que el usuario revisa a diario.
+
+### 26 de agosto de 2026 (tanda 1) — Logo real de Droppett (sidebar + favicon)
 
 - El usuario pegó una captura del logo de Droppett (ícono de wifi + nube, wordmark "DROPPETT"),
   pero la imagen tenía de fondo el papel rayado de la app de origen y las marcas de selección
@@ -2093,7 +2131,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
 ### `app/page.tsx`
 
-Dashboard. `Donut` dibuja las donas en SVG; el texto se centra con flexbox superpuesto, no con `text-anchor`. Columna 2 incluye el panel **Tickets por empresa** (usa `d.byCompany`, ya calculado por `getSupportDashboard()` pero sin usar hasta el 2026-08-25), con la barra pintada del color de cada empresa.
+Dashboard. `Donut` dibuja las donas en SVG; el texto se centra con flexbox superpuesto, no con `text-anchor`. Columna 2 incluye el panel **Tickets por empresa** (usa `d.byCompany`, ya calculado por `getSupportDashboard()` pero sin usar hasta el 2026-08-25), con la barra pintada del color de cada empresa. El encabezado "📅 PERIODO" usa `periodLabel` (§14, 2026-08-26): el filtro elegido (`from`/`to`), no el rango de datos.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2111,6 +2149,10 @@ function fmtPeriod(min: string | null, max: string | null) {
   const a = new Date(min), b = new Date(max);
   const f = (d: Date) => `${d.getUTCDate()} ${MESES[d.getUTCMonth()]}`;
   return `${f(a)} – ${f(b)} ${b.getUTCFullYear()}`;
+}
+function fmtYMD(s: string) {
+  const [y, m, d] = s.split("-").map(Number);
+  return `${d} ${MESES[m - 1]} ${y}`;
 }
 function fmtDate(iso: string) {
   const d = new Date(iso);
@@ -2146,6 +2188,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
     return <Setup />;
   }
 
+  const periodLabel = (from || to)
+    ? `${from ? fmtYMD(from) : "inicio"} – ${to ? fmtYMD(to) : "hoy"}`
+    : "Todo el historial";
+
   const closedPct = d.total ? Math.round((d.closed / d.total) * 100) : 0;
   const openPct = 100 - closedPct;
   const maxCat = Math.max(1, ...d.byCategory.map((c) => c.n));
@@ -2160,7 +2206,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
         <div className="report-head">
           <div>
             <div className="rh-title">RESUMEN DE TICKETS DE SOPORTE</div>
-            <div className="rh-period">📅 PERIODO: <b>{fmtPeriod(d.minDate, d.maxDate)}</b></div>
+            <div className="rh-period">📅 PERIODO: <b>{periodLabel}</b></div>
             <div style={{ marginTop: 12 }}><DateRangeFilter /></div>
           </div>
           <div className="stat-cards">
@@ -2304,7 +2350,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
               <div className="panel-title">Resumen</div>
               <div className="resumen-lead">
                 <div className="ri"><svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></svg></div>
-                <p>Todos los tickets del período {fmtPeriod(d.minDate, d.maxDate)} fueron atendidos y cerrados satisfactoriamente.</p>
+                <p>
+                  {d.total === 0
+                    ? "No hay tickets registrados en este período."
+                    : `Todos los tickets del período ${fmtPeriod(d.minDate, d.maxDate)} fueron atendidos y cerrados satisfactoriamente.`}
+                </p>
               </div>
               <div className="resumen-item"><div className="ri"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6 9 17l-5-5" /></svg></div><div><div className="rt">Eficiencia</div><div className="rd">{closedPct}% de tickets cerrados</div></div></div>
               <div className="resumen-item"><div className="ri"><svg viewBox="0 0 24 24" width="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg></div><div><div className="rt">Respuesta oportuna</div><div className="rd">Atención rápida y efectiva</div></div></div>
@@ -2895,6 +2945,7 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #0A0E15; font-weight: 700; }
 .btn.primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
 .btn.sm { padding: 6px 10px; font-size: 12.5px; }
+.btn.active { background: var(--accent); border-color: var(--accent); color: #0A0E15; font-weight: 700; }
 
 /* ---------- Cards / grids ---------- */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
@@ -2919,6 +2970,8 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 .report-head .rh-title { font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 800; letter-spacing: -.02em; }
 .report-head .rh-period { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); margin-top: 8px; display: flex; align-items: center; gap: 8px; }
 .report-head .rh-period b { color: var(--accent-ink); }
+.daterange-wrap { display: flex; flex-direction: column; gap: 10px; }
+.dr-presets { display: flex; gap: 8px; flex-wrap: wrap; }
 .daterange { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
 .daterange label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
 .daterange input[type=date] { font-family: var(--font-sans); font-size: 13px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 7px 10px; color-scheme: dark; cursor: pointer; }
@@ -3454,12 +3507,31 @@ export function Setup() {
 
 ### `components/DateRangeFilter.tsx`
 
-Rango de fechas del dashboard.
+Rango de fechas del dashboard. Desde el 2026-08-26 incluye presets rápidos (Todo/Hoy/3
+días/1 semana/1 mes) calculados con `new Date()` en el cliente, además de los campos manuales
+Desde/Hasta de siempre para un rango personalizado.
 
 ```tsx
 "use client";
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+
+function ymd(d: Date) {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+function addDays(d: Date, delta: number) {
+  const r = new Date(d);
+  r.setDate(r.getDate() + delta);
+  return r;
+}
+
+const PRESETS = [
+  { label: "Hoy", days: 0 },
+  { label: "3 días", days: 3 },
+  { label: "1 semana", days: 7 },
+  { label: "1 mes", days: 30 },
+];
 
 export function DateRangeFilter() {
   const router = useRouter();
@@ -3469,33 +3541,72 @@ export function DateRangeFilter() {
   const from = sp.get("from") || "";
   const to = sp.get("to") || "";
 
+  const goTo = (params: URLSearchParams) => {
+    router.push(pathname + (params.toString() ? "?" + params.toString() : ""));
+  };
+
   const set = (k: string, v: string) => {
     const p = new URLSearchParams(Array.from(sp.entries()));
     if (v) p.set(k, v);
     else p.delete(k);
-    router.push(pathname + (p.toString() ? "?" + p.toString() : ""));
+    goTo(p);
+  };
+
+  const setRange = (f: string, t: string) => {
+    const p = new URLSearchParams(Array.from(sp.entries()));
+    p.set("from", f);
+    p.set("to", t);
+    goTo(p);
   };
 
   const clear = () => {
     const p = new URLSearchParams(Array.from(sp.entries()));
     p.delete("from");
     p.delete("to");
-    router.push(pathname + (p.toString() ? "?" + p.toString() : ""));
+    goTo(p);
   };
 
+  const today = new Date();
+  const todayStr = ymd(today);
+
   return (
-    <div className="daterange">
-      <label>
-        Desde
-        <input type="date" value={from} max={to || undefined} onChange={(e) => set("from", e.target.value)} />
-      </label>
-      <label>
-        Hasta
-        <input type="date" value={to} min={from || undefined} onChange={(e) => set("to", e.target.value)} />
-      </label>
-      {(from || to) && (
-        <button type="button" className="btn sm" onClick={clear}>Limpiar</button>
-      )}
+    <div className="daterange-wrap">
+      <div className="dr-presets">
+        <button
+          type="button"
+          className={"btn sm" + (!from && !to ? " active" : "")}
+          onClick={clear}
+        >
+          Todo
+        </button>
+        {PRESETS.map((p) => {
+          const f = ymd(addDays(today, -p.days));
+          const isActive = from === f && to === todayStr;
+          return (
+            <button
+              key={p.label}
+              type="button"
+              className={"btn sm" + (isActive ? " active" : "")}
+              onClick={() => setRange(f, todayStr)}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="daterange">
+        <label>
+          Desde
+          <input type="date" value={from} max={to || undefined} onChange={(e) => set("from", e.target.value)} />
+        </label>
+        <label>
+          Hasta
+          <input type="date" value={to} min={from || undefined} onChange={(e) => set("to", e.target.value)} />
+        </label>
+        {(from || to) && (
+          <button type="button" className="btn sm" onClick={clear}>Limpiar</button>
+        )}
+      </div>
     </div>
   );
 }
