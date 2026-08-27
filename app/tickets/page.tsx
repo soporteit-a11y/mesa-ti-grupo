@@ -79,7 +79,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: Reco
         </div>
         <div className="push">
           <CollaboratorsDialog collaborators={collaborators} companies={companies} />
-          <NewTicketDialog companies={companies} categories={categories} collaborators={collaborators} />
+          <NewTicketDialog companies={companies} categories={cats.map((c) => c.name)} collaborators={collaborators} />
         </div>
       </div>
 

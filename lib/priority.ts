@@ -12,19 +12,6 @@ export const STATUS_LABEL: Record<Status, string> = {
 export const TICKET_PRIORITIES = ["Alta", "Media", "Baja"] as const;
 export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 
-export const TICKET_CATEGORIES = [
-  "Impresora",
-  "Carpetas Compartidas",
-  "Correo Electronico",
-  "Hardware / Laptop",
-  "Office / Apps",
-  "Requerimiento de Compras",
-  "Suministros / Cables",
-  "Flota (Tablets)",
-  "Red / Conectividad",
-  "Otros",
-];
-
 export const INITIATIVE_STATUSES = ["planificado", "en_curso", "en_pausa", "completado"] as const;
 export type InitiativeStatus = (typeof INITIATIVE_STATUSES)[number];
 

@@ -2,13 +2,10 @@
 
 import { useRef, useState } from "react";
 import { createTicket } from "@/app/actions";
-import { TICKET_CATEGORIES } from "@/lib/priority";
 
 export function NewTicketDialog({ companies, categories, collaborators }: { companies: any[]; categories: string[]; collaborators: any[] }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
-
-  const catOptions = Array.from(new Set([...(categories || []), ...TICKET_CATEGORIES]));
 
   return (
     <>
@@ -50,7 +47,7 @@ export function NewTicketDialog({ companies, categories, collaborators }: { comp
               <div className="field">
                 <label>Categoría</label>
                 <select name="category" defaultValue="Otros">
-                  {catOptions.map((c) => (
+                  {categories.map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>

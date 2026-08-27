@@ -15,9 +15,9 @@
 > **Fecha del traspaso:** 24 de agosto de 2026
 > **Última actualización:** 27 de agosto de 2026 — el contenido usa todo el ancho disponible en
 > monitores grandes, el gráfico de empresas del dashboard enlaza a la bandeja filtrada,
-> categorías/colaboradores (con correo y celular) ya se pueden editar desde `/config`, y
-> Colaboradores pasó a ser su propia sección de ancho completo (ya no cabía en el grid de 3
-> columnas). Ver §14.
+> categorías/colaboradores (con correo y celular) ya se pueden editar desde `/config`,
+> Colaboradores pasó a ser su propia sección de ancho completo, y se eliminó una lista de
+> categorías fija que hacía que "Nuevo ticket" mostrara categorías ya borradas o renombradas. Ver §14.
 > **Estado:** en producción y en uso real.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
@@ -771,6 +771,33 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 27 de agosto de 2026 (tanda 3) — Categorías desincronizadas al crear ticket + auditoría completa
+
+El usuario reportó que categorías que había quitado o modificado en `/config` seguían saliendo
+al crear un ticket nuevo, y pidió validar que **todas** las acciones estuvieran sincronizadas, no
+solo categorías.
+
+**La causa:** `components/NewTicketDialog.tsx` combinaba la lista de categorías de la BD con
+`TICKET_CATEGORIES`, una lista de 10 nombres grabada en `lib/priority.ts` desde el import inicial
+del CSV (§14, entrada "Antes del 24 de agosto"). Esa lista nunca se tocó desde entonces, así que:
+categorías borradas en `/config` seguían ofreciéndose (venían de la lista fija, no de la BD), y
+"Flota (Tablets)" (el nombre original, hoy renombrado a "Flota - Tablets / Celulares") seguía
+apareciendo como opción fantasma. `TICKET_CATEGORIES` se eliminó de `lib/priority.ts`;
+`NewTicketDialog` ahora solo recibe `cats.map(c => c.name)` — categorías reales de la BD, sin
+mezclar nada (§11 de este documento, sección `app/tickets/page.tsx`, explica por qué `/tickets`
+mantiene **dos** listas de categorías a propósito: `categories`, unión con categorías históricas
+de tickets viejos, solo para el filtro; y `cats` a secas, solo de la BD, para crear/editar).
+
+**Auditoría del resto del sistema** (lo que pidió el usuario explícitamente): se revisaron todos
+los `import ... from "@/lib/priority"` del proyecto y todo uso de listas de opciones en
+formularios. `TICKET_CATEGORIES` era el único caso de una lista fija mezclada con datos de la
+BD — no se encontró ningún otro. Lo demás que está "hardcoded" en el código (`STATUSES` /
+`STATUS_LABEL`, `INITIATIVE_STATUSES` / `INITIATIVE_STATUS_LABEL`, prioridad Alta/Media/Baja) es
+correcto que lo esté: son enumeraciones fijas del negocio, no hay ninguna pantalla en `/config`
+que las edite, así que no hay nada con lo que puedan desincronizarse. Empresas, colaboradores,
+categorías (para editar) y respuestas rápidas ya se leían directo de la BD en cada pantalla donde
+aparecen — sin ninguna lista intermedia fija.
 
 ### 27 de agosto de 2026 (tanda 2) — Colaboradores sale del grid de 3 columnas
 
@@ -1769,19 +1796,6 @@ export const STATUS_LABEL: Record<Status, string> = {
 export const TICKET_PRIORITIES = ["Alta", "Media", "Baja"] as const;
 export type TicketPriority = (typeof TICKET_PRIORITIES)[number];
 
-export const TICKET_CATEGORIES = [
-  "Impresora",
-  "Carpetas Compartidas",
-  "Correo Electronico",
-  "Hardware / Laptop",
-  "Office / Apps",
-  "Requerimiento de Compras",
-  "Suministros / Cables",
-  "Flota (Tablets)",
-  "Red / Conectividad",
-  "Otros",
-];
-
 export const INITIATIVE_STATUSES = ["planificado", "en_curso", "en_pausa", "completado"] as const;
 export type InitiativeStatus = (typeof INITIATIVE_STATUSES)[number];
 
@@ -2488,7 +2502,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
 
 ### `app/tickets/page.tsx`
 
-Mesa de ayuda. Franja de aviso de SLA, `SlaCell` por fila y `data-label` en cada `<td>` para el modo tarjeta en móvil.
+Mesa de ayuda. Franja de aviso de SLA, `SlaCell` por fila y `data-label` en cada `<td>` para el modo tarjeta en móvil. **Dos listas de categorías distintas, a propósito** (desde 2026-08-27):
+`categories` (línea `const categories = ...`) es `cats` (BD) **unida** con las categorías que
+aparezcan en tickets viejos aunque ya no existan en `/config` — correcta para **filtrar**
+(`<Filters>`), porque tiene que poder filtrarse por una categoría histórica ya borrada. `cats` a
+secas (sin unir con nada) es la que se le pasa a `<NewTicketDialog>` y `<TicketDetailDialog>` —
+correcta para **crear/editar**, porque ahí solo deben ofrecerse categorías que existen de verdad
+hoy en `/config`. Si algún día agregas otro selector de categoría, usa `cats` si es para
+crear/editar y `categories` si es para filtrar — mezclarlos fue exactamente el bug de §14.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2572,7 +2593,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: Reco
         </div>
         <div className="push">
           <CollaboratorsDialog collaborators={collaborators} companies={companies} />
-          <NewTicketDialog companies={companies} categories={categories} collaborators={collaborators} />
+          <NewTicketDialog companies={companies} categories={cats.map((c) => c.name)} collaborators={collaborators} />
         </div>
       </div>
 
@@ -3857,20 +3878,23 @@ export function FiltersCompanyClient({ companies }: { companies: any[] }) {
 
 ### `components/NewTicketDialog.tsx`
 
-Diálogo de alta de ticket.
+Diálogo de alta de ticket. **La lista de categorías es la de `categories` (BD), sin mezclar nada
+más** — hasta el 2026-08-27 se combinaba con `TICKET_CATEGORIES`, una lista de 10 categorías
+grabada en el código en el momento del import del CSV. Esa lista nunca se actualizó cuando el
+usuario editó o borró categorías desde `/config`, así que categorías ya eliminadas (o renombradas,
+como "Flota (Tablets)" → "Flota - Tablets / Celulares") seguían apareciendo como opción al crear
+un ticket nuevo. `TICKET_CATEGORIES` se eliminó de `lib/priority.ts` (§14) — no queda ningún otro
+lugar del proyecto con un patrón similar, ver auditoría en §14.
 
 ```tsx
 "use client";
 
 import { useRef, useState } from "react";
 import { createTicket } from "@/app/actions";
-import { TICKET_CATEGORIES } from "@/lib/priority";
 
 export function NewTicketDialog({ companies, categories, collaborators }: { companies: any[]; categories: string[]; collaborators: any[] }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
-
-  const catOptions = Array.from(new Set([...(categories || []), ...TICKET_CATEGORIES]));
 
   return (
     <>
@@ -3912,7 +3936,7 @@ export function NewTicketDialog({ companies, categories, collaborators }: { comp
               <div className="field">
                 <label>Categoría</label>
                 <select name="category" defaultValue="Otros">
-                  {catOptions.map((c) => (
+                  {categories.map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
