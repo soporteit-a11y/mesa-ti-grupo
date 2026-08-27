@@ -33,7 +33,7 @@ export default async function ConfigPage() {
       </div>
 
       <div className="content">
-        <div className="grid g3">
+        <div className="grid g2">
 
           {/* ---------- Empresas ---------- */}
           <div className="card cfg-card">
@@ -89,46 +89,50 @@ export default async function ConfigPage() {
             </p>
           </div>
 
-          {/* ---------- Colaboradores ---------- */}
-          <div className="card cfg-card">
-            <div className="cfg-head">Colaboradores <span className="cfg-count">{collaborators.length}</span></div>
-            <div className="cfg-list">
-              {collaborators.map((c) => (
-                <div className="cfg-row cfg-row-collab" key={c.id}>
-                  <form action={updateCollaborator} className="cfg-edit cfg-edit-collab">
-                    <input type="hidden" name="id" value={c.id} />
-                    <input type="text" name="name" defaultValue={c.name} placeholder="Nombre" className="cfg-name-input" />
-                    <select name="company_id" defaultValue={c.company_id ?? ""} className="cfg-contact-input">
-                      <option value="">Empresa (opcional)</option>
-                      {companies.map((co) => (
-                        <option key={co.id} value={co.id}>{co.name}</option>
-                      ))}
-                    </select>
-                    <input type="email" name="email" defaultValue={c.email ?? ""} placeholder="Correo" className="cfg-contact-input" />
-                    <input type="tel" name="phone" defaultValue={c.phone ?? ""} placeholder="Celular" className="cfg-contact-input" />
-                    <button type="submit" className="btn sm" title="Guardar">✓</button>
-                  </form>
-                  <form action={deleteCollaborator}>
-                    <input type="hidden" name="id" value={c.id} />
-                    <button type="submit" className="btn sm danger" title="Eliminar">✕</button>
-                  </form>
-                </div>
-              ))}
-            </div>
-            <form action={createCollaborator} className="cfg-add">
-              <input type="text" name="name" placeholder="Nuevo colaborador" required />
-              <select name="company_id" defaultValue="">
-                <option value="">Empresa (opcional)</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <input type="email" name="email" placeholder="Correo (opcional)" />
-              <input type="tel" name="phone" placeholder="Celular (opcional)" />
-              <button type="submit" className="btn primary sm">Agregar</button>
-            </form>
-          </div>
+        </div>
 
+        {/* ---------- Colaboradores / usuarios del sistema ---------- */}
+        <div className="section-title">
+          <h2>Colaboradores</h2>
+          <span className="hint">usuarios del sistema — nombre, empresa, correo y celular</span>
+        </div>
+        <div className="card cfg-card">
+          <div className="cfg-head">Perfiles <span className="cfg-count">{collaborators.length}</span></div>
+          <div className="cfg-list">
+            {collaborators.map((c) => (
+              <div className="cfg-row cfg-row-collab" key={c.id}>
+                <form action={updateCollaborator} className="cfg-edit cfg-edit-collab">
+                  <input type="hidden" name="id" value={c.id} />
+                  <input type="text" name="name" defaultValue={c.name} placeholder="Nombre" className="cfg-name-input" />
+                  <select name="company_id" defaultValue={c.company_id ?? ""} className="cfg-contact-input">
+                    <option value="">Empresa (opcional)</option>
+                    {companies.map((co) => (
+                      <option key={co.id} value={co.id}>{co.name}</option>
+                    ))}
+                  </select>
+                  <input type="email" name="email" defaultValue={c.email ?? ""} placeholder="Correo" className="cfg-contact-input" />
+                  <input type="tel" name="phone" defaultValue={c.phone ?? ""} placeholder="Celular" className="cfg-contact-input" />
+                  <button type="submit" className="btn sm" title="Guardar">✓</button>
+                </form>
+                <form action={deleteCollaborator}>
+                  <input type="hidden" name="id" value={c.id} />
+                  <button type="submit" className="btn sm danger" title="Eliminar">✕</button>
+                </form>
+              </div>
+            ))}
+          </div>
+          <form action={createCollaborator} className="cfg-add">
+            <input type="text" name="name" placeholder="Nuevo colaborador" required />
+            <select name="company_id" defaultValue="">
+              <option value="">Empresa (opcional)</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <input type="email" name="email" placeholder="Correo (opcional)" />
+            <input type="tel" name="phone" placeholder="Celular (opcional)" />
+            <button type="submit" className="btn primary sm">Agregar</button>
+          </form>
         </div>
 
         {/* ---------- Respuestas rápidas ---------- */}

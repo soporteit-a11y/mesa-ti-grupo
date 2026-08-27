@@ -14,8 +14,10 @@
 >
 > **Fecha del traspaso:** 24 de agosto de 2026
 > **Última actualización:** 27 de agosto de 2026 — el contenido usa todo el ancho disponible en
-> monitores grandes, el gráfico de empresas del dashboard enlaza a la bandeja filtrada, y
-> categorías/colaboradores (con correo y celular) ya se pueden editar desde `/config`. Ver §14.
+> monitores grandes, el gráfico de empresas del dashboard enlaza a la bandeja filtrada,
+> categorías/colaboradores (con correo y celular) ya se pueden editar desde `/config`, y
+> Colaboradores pasó a ser su propia sección de ancho completo (ya no cabía en el grid de 3
+> columnas). Ver §14.
 > **Estado:** en producción y en uso real.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
@@ -688,10 +690,17 @@ botones, reordenar sería imposible en móvil. Ambos caminos llaman a la misma f
 
 ### Configuración (`/config`)
 
-Tres tarjetas en fila: **Empresas** (nombre + color, editable), **Categorías & SLA** (nombre —
-editable desde 2026-08-27 vía `updateCategory` — + horas objetivo) y **Colaboradores** (nombre,
-empresa, correo y celular, todos editables desde 2026-08-27 vía `updateCollaborator`; correo y
-celular son opcionales). Debajo, a todo lo ancho, **Respuestas rápidas** (título + texto).
+Dos tarjetas en fila: **Empresas** (nombre + color, editable) y **Categorías & SLA** (nombre —
+editable desde 2026-08-27 vía `updateCategory` — + horas objetivo). Debajo, a todo lo ancho,
+**Colaboradores** (nombre, empresa, correo y celular, todos editables vía `updateCollaborator`;
+correo y celular son opcionales) y **Respuestas rápidas** (título + texto).
+
+**Colaboradores salió del grid de 3 columnas el mismo día que se agregó** (2026-08-27, misma
+tanda): con nombre + empresa + correo + celular + dos botones, una tarjeta de 1/3 de página
+(~300px) no alcanzaba — cada campo terminaba en su propia línea, una fila por colaborador podía
+ocupar 3-4 líneas de alto con 17 colaboradores. La sección pasó a ser de ancho completo, con el
+mismo patrón que ya usaba **Respuestas rápidas** (`.section-title` + `.card` fuera del grid), en
+vez de inventar un layout nuevo — con eso todos los campos caben en una sola fila.
 
 Salvaguarda: una empresa solo se puede borrar si no tiene tickets, colaboradores ni rutas
 asociadas — `deleteCompany` cuenta las tres cosas y sale sin hacer nada si encuentra alguna.
@@ -763,7 +772,32 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
-### 27 de agosto de 2026 — Ancho completo, empresa→tickets, editar categorías y colaboradores
+### 27 de agosto de 2026 (tanda 2) — Colaboradores sale del grid de 3 columnas
+
+El usuario reportó que "el cuadro de colaboradores se dañó" tras la tanda 1 del mismo día. Antes
+de asumir nada se midió en vivo con `getBoundingClientRect()` sobre la fila de un colaborador en
+producción: la tarjeta de Colaboradores medía **~300px** de ancho (1/3 del grid de 3 columnas),
+pero el input de correo por sí solo ya medía 199px y el de celular 163px — ni sumando nombre +
+empresa + botones cabía nada en una sola línea. El `flex-wrap` que se había puesto sí evitaba que
+algo se recortara, pero el resultado visual era una fila de 3-4 líneas de alto por colaborador,
+con 17 colaboradores en la lista: se veía roto aunque técnicamente no lo estaba (los valores en
+el HTML servido eran correctos, se verificó con `curl` antes de tocar nada).
+
+El usuario aprovechó para pedir que además de arreglarse, esta sección se piense como **"todos
+los usuarios o perfiles del sistema"**, no como una lista secundaria de tickets. Cambio:
+
+- `app/config/page.tsx`: el grid superior pasa de `grid g3` (Empresas, Categorías, Colaboradores)
+  a `grid g2` (Empresas, Categorías). **Colaboradores se saca del grid** y pasa a ser su propia
+  sección de ancho completo, con el mismo patrón que ya usaba Respuestas rápidas
+  (`.section-title` + `<div className="card cfg-card">` fuera del grid) — se reusó un patrón que
+  ya existía en la misma página en vez de inventar uno nuevo.
+- `app/globals.css`: `.cfg-contact-input` sube su `min-width` de 110px a 150px; nueva regla
+  `.cfg-edit-collab .cfg-name-input { flex: 1.4; min-width: 170px }` para que el nombre tenga más
+  peso relativo que el resto de los campos. Con el ancho completo de la página (agrandado en la
+  tanda 1 de hoy, §14) todos los campos caben ahora en una sola fila.
+- No se tocó el modelo de datos ni las Server Actions — el problema era enteramente de layout.
+
+### 27 de agosto de 2026 (tanda 1) — Ancho completo, empresa→tickets, editar categorías y colaboradores
 
 Cuatro pedidos en un mismo mensaje. Antes de tocar CSS se creó y empaquetó una skill personal del
 usuario, **`visual-design-changes`** (fuera de este repo, en su perfil de Claude), con un
@@ -2768,7 +2802,7 @@ export default async function ConfigPage() {
       </div>
 
       <div className="content">
-        <div className="grid g3">
+        <div className="grid g2">
 
           {/* ---------- Empresas ---------- */}
           <div className="card cfg-card">
@@ -2824,46 +2858,50 @@ export default async function ConfigPage() {
             </p>
           </div>
 
-          {/* ---------- Colaboradores ---------- */}
-          <div className="card cfg-card">
-            <div className="cfg-head">Colaboradores <span className="cfg-count">{collaborators.length}</span></div>
-            <div className="cfg-list">
-              {collaborators.map((c) => (
-                <div className="cfg-row cfg-row-collab" key={c.id}>
-                  <form action={updateCollaborator} className="cfg-edit cfg-edit-collab">
-                    <input type="hidden" name="id" value={c.id} />
-                    <input type="text" name="name" defaultValue={c.name} placeholder="Nombre" className="cfg-name-input" />
-                    <select name="company_id" defaultValue={c.company_id ?? ""} className="cfg-contact-input">
-                      <option value="">Empresa (opcional)</option>
-                      {companies.map((co) => (
-                        <option key={co.id} value={co.id}>{co.name}</option>
-                      ))}
-                    </select>
-                    <input type="email" name="email" defaultValue={c.email ?? ""} placeholder="Correo" className="cfg-contact-input" />
-                    <input type="tel" name="phone" defaultValue={c.phone ?? ""} placeholder="Celular" className="cfg-contact-input" />
-                    <button type="submit" className="btn sm" title="Guardar">✓</button>
-                  </form>
-                  <form action={deleteCollaborator}>
-                    <input type="hidden" name="id" value={c.id} />
-                    <button type="submit" className="btn sm danger" title="Eliminar">✕</button>
-                  </form>
-                </div>
-              ))}
-            </div>
-            <form action={createCollaborator} className="cfg-add">
-              <input type="text" name="name" placeholder="Nuevo colaborador" required />
-              <select name="company_id" defaultValue="">
-                <option value="">Empresa (opcional)</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <input type="email" name="email" placeholder="Correo (opcional)" />
-              <input type="tel" name="phone" placeholder="Celular (opcional)" />
-              <button type="submit" className="btn primary sm">Agregar</button>
-            </form>
-          </div>
+        </div>
 
+        {/* ---------- Colaboradores / usuarios del sistema ---------- */}
+        <div className="section-title">
+          <h2>Colaboradores</h2>
+          <span className="hint">usuarios del sistema — nombre, empresa, correo y celular</span>
+        </div>
+        <div className="card cfg-card">
+          <div className="cfg-head">Perfiles <span className="cfg-count">{collaborators.length}</span></div>
+          <div className="cfg-list">
+            {collaborators.map((c) => (
+              <div className="cfg-row cfg-row-collab" key={c.id}>
+                <form action={updateCollaborator} className="cfg-edit cfg-edit-collab">
+                  <input type="hidden" name="id" value={c.id} />
+                  <input type="text" name="name" defaultValue={c.name} placeholder="Nombre" className="cfg-name-input" />
+                  <select name="company_id" defaultValue={c.company_id ?? ""} className="cfg-contact-input">
+                    <option value="">Empresa (opcional)</option>
+                    {companies.map((co) => (
+                      <option key={co.id} value={co.id}>{co.name}</option>
+                    ))}
+                  </select>
+                  <input type="email" name="email" defaultValue={c.email ?? ""} placeholder="Correo" className="cfg-contact-input" />
+                  <input type="tel" name="phone" defaultValue={c.phone ?? ""} placeholder="Celular" className="cfg-contact-input" />
+                  <button type="submit" className="btn sm" title="Guardar">✓</button>
+                </form>
+                <form action={deleteCollaborator}>
+                  <input type="hidden" name="id" value={c.id} />
+                  <button type="submit" className="btn sm danger" title="Eliminar">✕</button>
+                </form>
+              </div>
+            ))}
+          </div>
+          <form action={createCollaborator} className="cfg-add">
+            <input type="text" name="name" placeholder="Nuevo colaborador" required />
+            <select name="company_id" defaultValue="">
+              <option value="">Empresa (opcional)</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <input type="email" name="email" placeholder="Correo (opcional)" />
+            <input type="tel" name="phone" placeholder="Celular (opcional)" />
+            <button type="submit" className="btn primary sm">Agregar</button>
+          </form>
         </div>
 
         {/* ---------- Respuestas rápidas ---------- */}
@@ -3205,8 +3243,9 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .cfg-add input[type=text] { flex: 1; min-width: 120px; font-size: 13px; padding: 7px 10px; }
 .cfg-add select { width: auto; min-width: 120px; font-size: 13px; padding: 7px 10px; }
 .cfg-add input[type=email], .cfg-add input[type=tel] { flex: 1; min-width: 110px; font-size: 13px; padding: 7px 10px; }
-.cfg-edit-collab { flex-wrap: wrap; row-gap: 6px; }
-.cfg-contact-input { width: auto; min-width: 110px; flex: 1; font-size: 13px; padding: 5px 8px; }
+.cfg-edit-collab { flex-wrap: wrap; row-gap: 8px; }
+.cfg-edit-collab .cfg-name-input { flex: 1.4; min-width: 170px; }
+.cfg-contact-input { width: auto; min-width: 150px; flex: 1; font-size: 13px; padding: 5px 8px; }
 .btn.danger { color: var(--crit); border-color: var(--line-strong); padding: 5px 9px; }
 .btn.danger:hover { border-color: var(--crit); background: var(--crit-w); }
 
