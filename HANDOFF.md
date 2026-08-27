@@ -16,8 +16,9 @@
 > **Última actualización:** 27 de agosto de 2026 — el contenido usa todo el ancho disponible en
 > monitores grandes, el gráfico de empresas del dashboard enlaza a la bandeja filtrada,
 > categorías/colaboradores (con correo y celular) ya se pueden editar desde `/config`,
-> Colaboradores pasó a ser su propia sección de ancho completo, y se eliminó una lista de
-> categorías fija que hacía que "Nuevo ticket" mostrara categorías ya borradas o renombradas. Ver §14.
+> Colaboradores pasó a ser su propia sección de ancho completo, se eliminó una lista de
+> categorías fija que hacía que "Nuevo ticket" mostrara categorías ya borradas o renombradas, y
+> se validó la conexión con Vercel vía su MCP (ya no da 404 — nota vieja corregida). Ver §14.
 > **Estado:** en producción y en uso real.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
@@ -564,9 +565,13 @@ alguna vez GitHub no está disponible.
 
 ### Cómo verificar que un despliegue funcionó
 
-La API de detalle de despliegues de Vercel (`get_deployment`, `get_deployment_build_logs`)
-**devuelve 404 para este proyecto** — es una limitación del plan Hobby con scope personal,
-no señal de fallo. No te fíes de ella ni la uses como diagnóstico.
+**Corrección (2026-08-27):** esto se documentó el 24-ago porque en ese momento `get_deployment` y
+`get_deployment_build_logs` devolvían 404. Probado de nuevo hoy con el MCP de Vercel
+(`list_teams` → `team_dNPSiAmBa9NeAjoKVIAY7Jte`, `list_projects`, `get_project`, `list_deployments`
+y `get_deployment` sobre el ID exacto del último deploy) y **todas responden bien**, con el
+`githubCommitSha` coincidiendo exacto con el commit recién pusheado y `readyState: "READY"`. No
+está claro qué cambió (¿token del MCP renovado?, ¿algo del lado de Vercel?), pero a partir de hoy
+sí es una vía de verificación válida — igual de fiable seguir confirmando contra la URL pública.
 
 El método fiable es consultar directamente la URL de producción:
 
@@ -771,6 +776,24 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 27 de agosto de 2026 (tanda 4) — Validación de la conexión con Vercel (sin cambios de código)
+
+El usuario pidió validar la conexión con Vercel. Se probó el MCP de Vercel de punta a punta:
+`list_teams` → equipo `helpdesk10`; `get_git_deployment_context` → confirma `mesa-ti-grupo`
+enlazado a `soporteit-a11y/mesa-ti-grupo` en GitHub; `list_projects` y `get_project` → devuelven
+el proyecto con su `latestDeployment` en `READY`; `list_deployments` → los últimos ~10 despliegues
+de esta sesión, todos `READY`, cada uno con el `githubCommitSha` exacto del commit correspondiente;
+`get_deployment` sobre el ID del último → coincide con el commit recién pusheado
+(`539c7e9...`, el fix de categorías de la tanda 3) y `readyState: "READY"`.
+
+**Se corrigió una nota desactualizada** (§10 de este documento y §5.2 de CONTINUIDAD.md): decían
+que `get_deployment`/`get_deployment_build_logs`/`get_project` daban 404 para este proyecto. Ya
+no es así — probablemente cambió algo del lado del token del MCP o de Vercel entre el 24-ago y
+hoy. La recomendación de seguir verificando también contra la URL pública se mantiene, porque no
+depende de ningún token.
+
+Ningún archivo de código cambió en esta tanda — solo la corrección de estas dos notas.
 
 ### 27 de agosto de 2026 (tanda 3) — Categorías desincronizadas al crear ticket + auditoría completa
 

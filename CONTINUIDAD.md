@@ -275,12 +275,15 @@ solo contiene esos archivos, y el sitio se cae con 404 — pero la herramienta r
 Ya pasó dos veces. La segunda dejó producción caída varios minutos. Con git montado esto ya no
 debería hacer falta nunca.
 
-### 5.2 La API de Vercel miente por omisión
+### 5.2 La API de Vercel — ya no da 404 (corregido 2026-08-27)
 
-- `get_deployment` y `get_deployment_build_logs` devuelven **404** para este proyecto. Es normal
-  (plan Hobby, scope personal), no es un fallo.
-- `get_project` también da 404.
-- **La única verificación fiable es consultar la URL de producción.**
+Esto se documentó el 24-ago porque en ese momento `get_deployment`, `get_deployment_build_logs`
+y `get_project` daban 404. **Ya no es así:** probado el 27-ago con el MCP de Vercel —
+`list_teams` → equipo `helpdesk10` (`team_dNPSiAmBa9NeAjoKVIAY7Jte`), `list_projects`,
+`get_project`, `list_deployments` y `get_deployment` sobre el ID del último deploy — y todo
+respondió bien, con el `githubCommitSha` exacto del commit recién pusheado y `readyState: "READY"`.
+No se sabe qué cambió, pero hoy es una vía de verificación válida. **Sigue siendo buena práctica
+confirmar también contra la URL pública** (§1), que no depende de ningún token ni permiso.
 
 ### 5.3 Enlazar un repositorio no despliega nada
 
