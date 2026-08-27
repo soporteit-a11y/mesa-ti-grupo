@@ -13,8 +13,9 @@
 > ya descubiertas.
 >
 > **Fecha del traspaso:** 24 de agosto de 2026
-> **Última actualización:** 26 de agosto de 2026 — logo real de Droppett en sidebar y favicon,
-> y presets de período (Hoy/3 días/1 semana/1 mes/personalizado) en el dashboard. Ver §14.
+> **Última actualización:** 27 de agosto de 2026 — el contenido usa todo el ancho disponible en
+> monitores grandes, el gráfico de empresas del dashboard enlaza a la bandeja filtrada, y
+> categorías/colaboradores (con correo y celular) ya se pueden editar desde `/config`. Ver §14.
 > **Estado:** en producción y en uso real.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
@@ -273,7 +274,7 @@ uso — este es el esquema efectivo actual de `ensureSchema()`:
 ```sql
 companies         (id, name UNIQUE, slug, color)
 categories        (id, name UNIQUE, sla_hours DEFAULT 24)
-collaborators     (id, name UNIQUE, company_id → companies)
+collaborators     (id, name UNIQUE, company_id → companies, email, phone)
 tickets           (id, title, description, company_id → companies,
                    category, priority, status DEFAULT 'resuelto', requester,
                    created_at, updated_at, resolved_at)
@@ -292,8 +293,12 @@ canned_responses  (id, title UNIQUE, text)
   (`LEFT JOIN categories cat ON cat.name = t.category`). Consecuencia: si el usuario **renombra**
   una categoría en `/config`, los tickets viejos quedan huérfanos y su SLA cae al valor por defecto
   de 24 h vía `COALESCE`. Es una deuda técnica conocida y aceptada. *(De hecho ya ocurrió: la
-  categoría sembrada como "Flota (Tablets)" hoy se llama "Flota - Tablets / Celulares" en producción.)*
-  Sigue pendiente (P7 en CONTINUIDAD.md).
+  categoría sembrada como "Flota (Tablets)" hoy se llama "Flota - Tablets / Celulares" en producción,
+  renombrada por fuera de la interfaz antes de que existiera un botón para hacerlo.)* Sigue
+  pendiente (P7 en CONTINUIDAD.md) — el 2026-08-27 se agregó la edición de nombre desde `/config`
+  (`updateCategory`), pero la deuda de fondo (columna de texto libre, no clave foránea) no se tocó.
+- **`collaborators.email` / `collaborators.phone`** (agregadas 2026-08-27): datos de contacto
+  opcionales, editables desde `/config` junto con el nombre y la empresa del colaborador.
 - **`initiatives.due_date`** (agregada 2026-08-25): fecha límite opcional de la ruta, editable en
   línea desde `<InitiativeDueDate>`. `dueInfo()` en `app/rutas/page.tsx` la compara contra hoy para
   mostrar el chip "Atrasado Xd" / "Vence en Xd"; una ruta `completado` nunca se marca atrasada.
@@ -380,9 +385,10 @@ Todos los colores son variables CSS declaradas una sola vez en `:root` de `app/g
 
 ### Anchos y layout
 
-- Barra lateral fija de `244px` (`--sidebar-w`), contenido con `max-width: 1320px` y
-  `margin: 0 auto` (agregado 2026-08-25, §14) para que se centre en vez de pegarse a la izquierda
-  en monitores anchos — sin esto quedaba mucho espacio muerto a la derecha en pantallas grandes.
+- Barra lateral fija de `244px` (`--sidebar-w`), contenido con `max-width: 1600px` y
+  `margin: 0 auto` (centrado agregado 2026-08-25; el ancho subió de 1320px a 1600px el
+  2026-08-27, con un segundo salto a `1900px` desde `min-width: 1900px` — medido en vivo: a
+  2560px de viewport el contenido usaba solo 1320+244=1564px, dejando ~1000px muertos). Ver §14.
 - Radios: `--radius: 12px` en tarjetas, `--radius-sm: 7px` en campos.
 
 ### Sistema responsive
@@ -682,9 +688,10 @@ botones, reordenar sería imposible en móvil. Ambos caminos llaman a la misma f
 
 ### Configuración (`/config`)
 
-Tres tarjetas en fila: **Empresas** (nombre + color, editable), **Categorías & SLA** (nombre +
-horas objetivo) y **Colaboradores** (nombre + empresa). Debajo, a todo lo ancho, **Respuestas
-rápidas** (título + texto).
+Tres tarjetas en fila: **Empresas** (nombre + color, editable), **Categorías & SLA** (nombre —
+editable desde 2026-08-27 vía `updateCategory` — + horas objetivo) y **Colaboradores** (nombre,
+empresa, correo y celular, todos editables desde 2026-08-27 vía `updateCollaborator`; correo y
+celular son opcionales). Debajo, a todo lo ancho, **Respuestas rápidas** (título + texto).
 
 Salvaguarda: una empresa solo se puede borrar si no tiene tickets, colaboradores ni rutas
 asociadas — `deleteCompany` cuenta las tres cosas y sale sin hacer nada si encuentra alguna.
@@ -755,6 +762,45 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 27 de agosto de 2026 — Ancho completo, empresa→tickets, editar categorías y colaboradores
+
+Cuatro pedidos en un mismo mensaje. Antes de tocar CSS se creó y empaquetó una skill personal del
+usuario, **`visual-design-changes`** (fuera de este repo, en su perfil de Claude), con un
+organigrama de decisión para cambios visuales: reusar un patrón existente antes que inventar uno,
+revisar todos los breakpoints afectados (no solo el que se está agregando), compilar, y verificar
+en navegador — datos reales y vacíos, cada ancho de pantalla afectado — antes de dar por hecho el
+cambio. Se siguió ese orden para los cuatro pedidos de esta tanda.
+
+**1. Responsive de pantalla completa.** Medido en vivo con el DevTools del navegador antes de
+tocar nada: a 2560px de viewport, `.content` (`max-width: 1320px`) + `.sidebar` (`244px`) sumaban
+apenas 1564px, dejando **~1000px muertos** a los lados; a 1920px (resolución muy común) sobraban
+~356px. `app/globals.css`: `.content` sube de `1320px` a `1600px`, con un segundo salto a
+`1900px` desde `@media (min-width: 1900px)` para monitores aún más anchos. Los diálogos
+(`dialog.ticket-detail`, `640px`; el resto, `560px`) y la pantalla de `<Setup>` (`720px`)
+**no se tocaron a propósito** — son elementos que deben quedarse angostos y centrados aunque la
+pantalla sea enorme, estirarlos habría sido el error exacto que la skill nueva existe para evitar.
+Los breakpoints angostos (mobile/tablet, §8) ya estaban bien y no se modificaron.
+
+**2. El gráfico "Tickets por empresa" enlaza a la bandeja filtrada.** `app/page.tsx`: cada fila del
+panel pasa de `<div className="catbar">` a `<Link href="/tickets?company=<nombre>">`. No hizo
+falta tocar `/tickets` — ya filtraba por `?company=` desde antes (§5.7), usado también por
+`/rutas`. CSS nueva: `.catbar-link` (mismo hover que otros elementos clicables del sistema, fondo
+`--surface-2`).
+
+**3. Colaboradores editables, con correo y celular.** `lib/db.ts`: `collaborators.email` y
+`collaborators.phone`, columnas opcionales. Nueva Server Action `updateCollaborator`;
+`createCollaborator` gana los mismos dos campos. `/config`: la fila de colaborador pasa de texto
+fijo a un formulario editable (nombre, empresa, correo, celular), siguiendo el mismo patrón de
+`updateCompany` (fila = formulario con botón ✓) que ya existía para Empresas — no se inventó un
+patrón nuevo de edición.
+
+**4. Categorías editables.** Nueva Server Action `updateCategory`. Antes solo se podían crear y
+borrar (el SLA sí era editable vía `<SlaInput>`, el nombre no). Mismo patrón de fila-formulario
+que Empresas y Colaboradores. **La deuda técnica de fondo no cambió** (§6, P7): `tickets.category`
+sigue siendo texto libre, así que renombrar una categoría todavía deja huérfanos a los tickets
+viejos con el nombre anterior — ahora es más fácil hacerlo por accidente desde la interfaz, así
+que vale la pena tenerlo presente.
 
 ### 26 de agosto de 2026 (tanda 2) — Presets de período en el dashboard
 
@@ -1165,7 +1211,8 @@ async function init(q: NonNullable<typeof sql>) {
   )`;
   await q`CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)`;
   await q`CREATE TABLE IF NOT EXISTS collaborators (
-    id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, company_id INT REFERENCES companies(id)
+    id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, company_id INT REFERENCES companies(id),
+    email TEXT, phone TEXT
   )`;
   await q`CREATE TABLE IF NOT EXISTS categories (
     id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, sla_hours INT DEFAULT 24
@@ -1187,6 +1234,8 @@ async function init(q: NonNullable<typeof sql>) {
   await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category TEXT`;
   await q`ALTER TABLE categories ADD COLUMN IF NOT EXISTS sla_hours INT DEFAULT 24`;
   await q`ALTER TABLE initiatives ADD COLUMN IF NOT EXISTS due_date DATE`;
+  await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS email TEXT`;
+  await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS phone TEXT`;
   try { await q`ALTER TABLE tickets ALTER COLUMN priority DROP NOT NULL`; } catch (e) {}
 
   // Limpieza de columnas y tabla del modelo de priorizacion P1-P4, ya sin uso (2026-08-25).
@@ -1448,7 +1497,7 @@ export async function getCompanies() {
 
 export async function getCollaborators() {
   await ensureSchema();
-  return sql!`SELECT id, name, company_id FROM collaborators ORDER BY name`;
+  return sql!`SELECT id, name, company_id, email, phone FROM collaborators ORDER BY name`;
 }
 
 export async function getCategories() {
@@ -1754,7 +1803,7 @@ export function fmtSlaHours(h: number): string {
 
 ### `app/actions.ts`
 
-Las 25 mutaciones del sistema, todas con el patrón de cinco pasos.
+Las 27 mutaciones del sistema, todas con el patrón de cinco pasos.
 
 ```ts
 "use server";
@@ -1784,9 +1833,27 @@ export async function createCollaborator(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   const companyRaw = String(formData.get("company_id") || "");
   const company_id = companyRaw ? Number(companyRaw) : null;
+  const email = String(formData.get("email") || "").trim() || null;
+  const phone = String(formData.get("phone") || "").trim() || null;
   if (!name) return;
-  await sql!`INSERT INTO collaborators (name, company_id) VALUES (${name}, ${company_id}) ON CONFLICT (name) DO NOTHING`;
+  await sql!`INSERT INTO collaborators (name, company_id, email, phone)
+    VALUES (${name}, ${company_id}, ${email}, ${phone}) ON CONFLICT (name) DO NOTHING`;
   revalidatePath("/tickets");
+  revalidatePath("/config");
+}
+
+export async function updateCollaborator(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const name = String(formData.get("name") || "").trim();
+  const companyRaw = String(formData.get("company_id") || "");
+  const company_id = companyRaw ? Number(companyRaw) : null;
+  const email = String(formData.get("email") || "").trim() || null;
+  const phone = String(formData.get("phone") || "").trim() || null;
+  if (!id || !name) return;
+  await sql!`UPDATE collaborators SET name = ${name}, company_id = ${company_id}, email = ${email}, phone = ${phone} WHERE id = ${id}`;
+  revalidatePath("/tickets");
+  revalidatePath("/config");
 }
 
 /* ---------- Configuracion: empresas, categorias, colaboradores ---------- */
@@ -1832,6 +1899,16 @@ export async function createCategory(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   await sql!`INSERT INTO categories (name) VALUES (${name}) ON CONFLICT (name) DO NOTHING`;
+  revalidatePath("/config");
+  revalidatePath("/tickets");
+}
+
+export async function updateCategory(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const name = String(formData.get("name") || "").trim();
+  if (!id || !name) return;
+  await sql!`UPDATE categories SET name = ${name} WHERE id = ${id}`;
   revalidatePath("/config");
   revalidatePath("/tickets");
 }
@@ -2131,9 +2208,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
 ### `app/page.tsx`
 
-Dashboard. `Donut` dibuja las donas en SVG; el texto se centra con flexbox superpuesto, no con `text-anchor`. Columna 2 incluye el panel **Tickets por empresa** (usa `d.byCompany`, ya calculado por `getSupportDashboard()` pero sin usar hasta el 2026-08-25), con la barra pintada del color de cada empresa. El encabezado "📅 PERIODO" usa `periodLabel` (§14, 2026-08-26): el filtro elegido (`from`/`to`), no el rango de datos.
+Dashboard. `Donut` dibuja las donas en SVG; el texto se centra con flexbox superpuesto, no con `text-anchor`. Columna 2 incluye el panel **Tickets por empresa** (usa `d.byCompany`, ya calculado por `getSupportDashboard()` pero sin usar hasta el 2026-08-25), con la barra pintada del color de cada empresa. Cada fila es un `<Link>` a `/tickets?company=<nombre>` desde el 2026-08-27 (mismo parámetro que ya filtraba `/tickets` y `/rutas`, §5.7 — no hizo falta tocar la página de tickets). El encabezado "📅 PERIODO" usa `periodLabel` (§14, 2026-08-26): el filtro elegido (`from`/`to`), no el rango de datos.
 
 ```tsx
+import Link from "next/link";
 import { hasDb } from "@/lib/db";
 import { getSupportDashboard } from "@/lib/data";
 import { Setup } from "@/components/Setup";
@@ -2308,7 +2386,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
               <div className="panel-title">Tickets por empresa</div>
               <div className="catbars">
                 {d.byCompany.map((c: any) => (
-                  <div className="catbar" key={c.name}>
+                  <Link
+                    href={`/tickets?company=${encodeURIComponent(c.name)}`}
+                    className="catbar catbar-link"
+                    key={c.name}
+                    title={`Ver tickets de ${c.name}`}
+                  >
                     <div className="cb-top">
                       <span className="cb-name">{c.name}</span>
                       <span className="cb-val"><b>{c.n}</b></span>
@@ -2316,7 +2399,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                     <div className="catbar-track">
                       <div className="catbar-fill" style={{ width: `${(c.n / maxCompany) * 100}%`, background: c.color }} />
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>
@@ -2644,7 +2727,10 @@ export default async function RutasPage({ searchParams }: { searchParams: Record
 
 ### `app/config/page.tsx`
 
-Configuración. Cuatro bloques CRUD enlazados directo a las Server Actions.
+Configuración. Cuatro bloques CRUD enlazados directo a las Server Actions. Categorías y
+Colaboradores ganaron edición completa el 2026-08-27 (antes solo se podían crear/borrar); el
+helper `companyName` que solo servía para pintar el nombre de empresa de forma no editable se
+eliminó junto con esa lectura de solo-texto.
 
 ```tsx
 import { hasDb } from "@/lib/db";
@@ -2653,8 +2739,8 @@ import { Setup } from "@/components/Setup";
 import { SlaInput } from "@/components/SlaInput";
 import {
   createCompany, updateCompany, deleteCompany,
-  createCategory, deleteCategory,
-  createCollaborator, deleteCollaborator,
+  createCategory, updateCategory, deleteCategory,
+  createCollaborator, updateCollaborator, deleteCollaborator,
   createCanned, deleteCanned,
 } from "@/app/actions";
 
@@ -2671,8 +2757,6 @@ export default async function ConfigPage() {
   } catch (e) {
     return <Setup />;
   }
-
-  const companyName = (id: number | null) => companies.find((c) => c.id === id)?.name || "—";
 
   return (
     <>
@@ -2718,7 +2802,11 @@ export default async function ConfigPage() {
             <div className="cfg-list">
               {categories.map((c) => (
                 <div className="cfg-row" key={c.id}>
-                  <span className="cfg-name">{c.name}</span>
+                  <form action={updateCategory} className="cfg-edit">
+                    <input type="hidden" name="id" value={c.id} />
+                    <input type="text" name="name" defaultValue={c.name} className="cfg-name-input" />
+                    <button type="submit" className="btn sm" title="Guardar">✓</button>
+                  </form>
                   <SlaInput id={c.id} hours={c.sla_hours} />
                   <form action={deleteCategory}>
                     <input type="hidden" name="id" value={c.id} />
@@ -2741,9 +2829,20 @@ export default async function ConfigPage() {
             <div className="cfg-head">Colaboradores <span className="cfg-count">{collaborators.length}</span></div>
             <div className="cfg-list">
               {collaborators.map((c) => (
-                <div className="cfg-row" key={c.id}>
-                  <span className="cfg-name">{c.name}</span>
-                  <span className="pv-meta">{companyName(c.company_id)}</span>
+                <div className="cfg-row cfg-row-collab" key={c.id}>
+                  <form action={updateCollaborator} className="cfg-edit cfg-edit-collab">
+                    <input type="hidden" name="id" value={c.id} />
+                    <input type="text" name="name" defaultValue={c.name} placeholder="Nombre" className="cfg-name-input" />
+                    <select name="company_id" defaultValue={c.company_id ?? ""} className="cfg-contact-input">
+                      <option value="">Empresa (opcional)</option>
+                      {companies.map((co) => (
+                        <option key={co.id} value={co.id}>{co.name}</option>
+                      ))}
+                    </select>
+                    <input type="email" name="email" defaultValue={c.email ?? ""} placeholder="Correo" className="cfg-contact-input" />
+                    <input type="tel" name="phone" defaultValue={c.phone ?? ""} placeholder="Celular" className="cfg-contact-input" />
+                    <button type="submit" className="btn sm" title="Guardar">✓</button>
+                  </form>
                   <form action={deleteCollaborator}>
                     <input type="hidden" name="id" value={c.id} />
                     <button type="submit" className="btn sm danger" title="Eliminar">✕</button>
@@ -2759,6 +2858,8 @@ export default async function ConfigPage() {
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
+              <input type="email" name="email" placeholder="Correo (opcional)" />
+              <input type="tel" name="phone" placeholder="Celular (opcional)" />
               <button type="submit" className="btn primary sm">Agregar</button>
             </form>
           </div>
@@ -2925,7 +3026,12 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 .topbar h1 { font-size: 1.15rem; font-weight: 680; }
 .topbar .sub { font-size: 12.5px; color: var(--muted); font-family: var(--font-mono); }
 .topbar .push { margin-left: auto; display: flex; gap: 10px; align-items: center; }
-.content { padding: 24px 28px 60px; max-width: 1320px; width: 100%; margin: 0 auto; }
+.content { padding: 24px 28px 60px; max-width: 1600px; width: 100%; margin: 0 auto; }
+
+/* Monitores muy anchos: seguir usando mas espacio en vez de dejar margenes enormes */
+@media (min-width: 1900px) {
+  .content { max-width: 1900px; }
+}
 
 @media (max-width: 820px) {
   .app { grid-template-columns: 1fr; }
@@ -3009,6 +3115,8 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 /* ---------- Category horizontal bars ---------- */
 .catbars { display: flex; flex-direction: column; gap: 11px; }
 .catbar { display: grid; grid-template-columns: 1fr; gap: 5px; }
+.catbar-link { color: inherit; text-decoration: none; cursor: pointer; border-radius: 6px; padding: 4px 6px; margin: -4px -6px; transition: background .15s ease; }
+.catbar-link:hover { background: var(--surface-2); }
 .catbar .cb-top { display: flex; justify-content: space-between; font-size: 12.5px; }
 .catbar .cb-name { color: var(--ink-soft); }
 .catbar .cb-val { font-family: var(--font-mono); color: var(--muted); }
@@ -3096,6 +3204,9 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .cfg-add { display: flex; align-items: center; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .cfg-add input[type=text] { flex: 1; min-width: 120px; font-size: 13px; padding: 7px 10px; }
 .cfg-add select { width: auto; min-width: 120px; font-size: 13px; padding: 7px 10px; }
+.cfg-add input[type=email], .cfg-add input[type=tel] { flex: 1; min-width: 110px; font-size: 13px; padding: 7px 10px; }
+.cfg-edit-collab { flex-wrap: wrap; row-gap: 6px; }
+.cfg-contact-input { width: auto; min-width: 110px; flex: 1; font-size: 13px; padding: 5px 8px; }
 .btn.danger { color: var(--crit); border-color: var(--line-strong); padding: 5px 9px; }
 .btn.danger:hover { border-color: var(--crit); background: var(--crit-w); }
 

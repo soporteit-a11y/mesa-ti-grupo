@@ -49,7 +49,8 @@ async function init(q: NonNullable<typeof sql>) {
   )`;
   await q`CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)`;
   await q`CREATE TABLE IF NOT EXISTS collaborators (
-    id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, company_id INT REFERENCES companies(id)
+    id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, company_id INT REFERENCES companies(id),
+    email TEXT, phone TEXT
   )`;
   await q`CREATE TABLE IF NOT EXISTS categories (
     id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, sla_hours INT DEFAULT 24
@@ -71,6 +72,8 @@ async function init(q: NonNullable<typeof sql>) {
   await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category TEXT`;
   await q`ALTER TABLE categories ADD COLUMN IF NOT EXISTS sla_hours INT DEFAULT 24`;
   await q`ALTER TABLE initiatives ADD COLUMN IF NOT EXISTS due_date DATE`;
+  await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS email TEXT`;
+  await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS phone TEXT`;
   try { await q`ALTER TABLE tickets ALTER COLUMN priority DROP NOT NULL`; } catch (e) {}
 
   // Limpieza de columnas y tabla del modelo de priorizacion P1-P4, ya sin uso (2026-08-25).

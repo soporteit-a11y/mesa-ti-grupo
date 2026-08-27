@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { hasDb } from "@/lib/db";
 import { getSupportDashboard } from "@/lib/data";
 import { Setup } from "@/components/Setup";
@@ -172,7 +173,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
               <div className="panel-title">Tickets por empresa</div>
               <div className="catbars">
                 {d.byCompany.map((c: any) => (
-                  <div className="catbar" key={c.name}>
+                  <Link
+                    href={`/tickets?company=${encodeURIComponent(c.name)}`}
+                    className="catbar catbar-link"
+                    key={c.name}
+                    title={`Ver tickets de ${c.name}`}
+                  >
                     <div className="cb-top">
                       <span className="cb-name">{c.name}</span>
                       <span className="cb-val"><b>{c.n}</b></span>
@@ -180,7 +186,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                     <div className="catbar-track">
                       <div className="catbar-fill" style={{ width: `${(c.n / maxCompany) * 100}%`, background: c.color }} />
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>

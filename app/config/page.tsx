@@ -4,8 +4,8 @@ import { Setup } from "@/components/Setup";
 import { SlaInput } from "@/components/SlaInput";
 import {
   createCompany, updateCompany, deleteCompany,
-  createCategory, deleteCategory,
-  createCollaborator, deleteCollaborator,
+  createCategory, updateCategory, deleteCategory,
+  createCollaborator, updateCollaborator, deleteCollaborator,
   createCanned, deleteCanned,
 } from "@/app/actions";
 
@@ -22,8 +22,6 @@ export default async function ConfigPage() {
   } catch (e) {
     return <Setup />;
   }
-
-  const companyName = (id: number | null) => companies.find((c) => c.id === id)?.name || "—";
 
   return (
     <>
@@ -69,7 +67,11 @@ export default async function ConfigPage() {
             <div className="cfg-list">
               {categories.map((c) => (
                 <div className="cfg-row" key={c.id}>
-                  <span className="cfg-name">{c.name}</span>
+                  <form action={updateCategory} className="cfg-edit">
+                    <input type="hidden" name="id" value={c.id} />
+                    <input type="text" name="name" defaultValue={c.name} className="cfg-name-input" />
+                    <button type="submit" className="btn sm" title="Guardar">✓</button>
+                  </form>
                   <SlaInput id={c.id} hours={c.sla_hours} />
                   <form action={deleteCategory}>
                     <input type="hidden" name="id" value={c.id} />
@@ -92,9 +94,20 @@ export default async function ConfigPage() {
             <div className="cfg-head">Colaboradores <span className="cfg-count">{collaborators.length}</span></div>
             <div className="cfg-list">
               {collaborators.map((c) => (
-                <div className="cfg-row" key={c.id}>
-                  <span className="cfg-name">{c.name}</span>
-                  <span className="pv-meta">{companyName(c.company_id)}</span>
+                <div className="cfg-row cfg-row-collab" key={c.id}>
+                  <form action={updateCollaborator} className="cfg-edit cfg-edit-collab">
+                    <input type="hidden" name="id" value={c.id} />
+                    <input type="text" name="name" defaultValue={c.name} placeholder="Nombre" className="cfg-name-input" />
+                    <select name="company_id" defaultValue={c.company_id ?? ""} className="cfg-contact-input">
+                      <option value="">Empresa (opcional)</option>
+                      {companies.map((co) => (
+                        <option key={co.id} value={co.id}>{co.name}</option>
+                      ))}
+                    </select>
+                    <input type="email" name="email" defaultValue={c.email ?? ""} placeholder="Correo" className="cfg-contact-input" />
+                    <input type="tel" name="phone" defaultValue={c.phone ?? ""} placeholder="Celular" className="cfg-contact-input" />
+                    <button type="submit" className="btn sm" title="Guardar">✓</button>
+                  </form>
                   <form action={deleteCollaborator}>
                     <input type="hidden" name="id" value={c.id} />
                     <button type="submit" className="btn sm danger" title="Eliminar">✕</button>
@@ -110,6 +123,8 @@ export default async function ConfigPage() {
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
+              <input type="email" name="email" placeholder="Correo (opcional)" />
+              <input type="tel" name="phone" placeholder="Celular (opcional)" />
               <button type="submit" className="btn primary sm">Agregar</button>
             </form>
           </div>

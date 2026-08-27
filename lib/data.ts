@@ -7,7 +7,7 @@ export async function getCompanies() {
 
 export async function getCollaborators() {
   await ensureSchema();
-  return sql!`SELECT id, name, company_id FROM collaborators ORDER BY name`;
+  return sql!`SELECT id, name, company_id, email, phone FROM collaborators ORDER BY name`;
 }
 
 export async function getCategories() {

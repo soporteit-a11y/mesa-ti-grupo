@@ -25,9 +25,27 @@ export async function createCollaborator(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   const companyRaw = String(formData.get("company_id") || "");
   const company_id = companyRaw ? Number(companyRaw) : null;
+  const email = String(formData.get("email") || "").trim() || null;
+  const phone = String(formData.get("phone") || "").trim() || null;
   if (!name) return;
-  await sql!`INSERT INTO collaborators (name, company_id) VALUES (${name}, ${company_id}) ON CONFLICT (name) DO NOTHING`;
+  await sql!`INSERT INTO collaborators (name, company_id, email, phone)
+    VALUES (${name}, ${company_id}, ${email}, ${phone}) ON CONFLICT (name) DO NOTHING`;
   revalidatePath("/tickets");
+  revalidatePath("/config");
+}
+
+export async function updateCollaborator(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const name = String(formData.get("name") || "").trim();
+  const companyRaw = String(formData.get("company_id") || "");
+  const company_id = companyRaw ? Number(companyRaw) : null;
+  const email = String(formData.get("email") || "").trim() || null;
+  const phone = String(formData.get("phone") || "").trim() || null;
+  if (!id || !name) return;
+  await sql!`UPDATE collaborators SET name = ${name}, company_id = ${company_id}, email = ${email}, phone = ${phone} WHERE id = ${id}`;
+  revalidatePath("/tickets");
+  revalidatePath("/config");
 }
 
 /* ---------- Configuracion: empresas, categorias, colaboradores ---------- */
@@ -73,6 +91,16 @@ export async function createCategory(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   await sql!`INSERT INTO categories (name) VALUES (${name}) ON CONFLICT (name) DO NOTHING`;
+  revalidatePath("/config");
+  revalidatePath("/tickets");
+}
+
+export async function updateCategory(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const name = String(formData.get("name") || "").trim();
+  if (!id || !name) return;
+  await sql!`UPDATE categories SET name = ${name} WHERE id = ${id}`;
   revalidatePath("/config");
   revalidatePath("/tickets");
 }

@@ -6,7 +6,7 @@
 > quedó y qué hay que saber para continuar sin perder nada. La descripción técnica completa,
 > con el código fuente íntegro, está en **`HANDOFF.md`**, en esta misma carpeta.
 >
-> **Última sesión:** 26 de agosto de 2026
+> **Última sesión:** 27 de agosto de 2026
 > **Estado del sistema:** en producción, funcionando, sin incidencias abiertas.
 >
 > ### 👉 ¿Buscas qué hay que hacer? Está todo en **§3.bis · TODO LO PENDIENTE**
@@ -71,6 +71,10 @@ Estas no son preferencias mías: salieron de peticiones suyas explícitas a lo l
 4. **Desplegar solo el diff, nunca el proyecto entero.** Petición suya explícita. Hoy se cumple
    vía git (§4).
 5. **Sin dependencias nuevas** salvo necesidad real. Cero librerías de UI, gráficos o CSS.
+6. **Para cualquier cambio visual/de diseño, seguir la skill `visual-design-changes`** (creada
+   2026-08-27, vive en el perfil de Claude del usuario, no en este repo): reusar un patrón
+   existente antes de inventar uno, revisar todos los breakpoints afectados y verificar en
+   navegador (datos reales y vacíos, cada ancho relevante) antes de dar el cambio por terminado.
 
 ### Cómo se comunica
 
