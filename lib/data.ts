@@ -96,6 +96,7 @@ export type SupportDashboard = {
   maxDate: string | null;
   byCategory: { category: string; n: number; pct: number }[];
   byCompany: any[];
+  timeByCompany: { name: string; color: string; n: number; total_minutes: number; avg_minutes: number }[];
   byDay: number[]; // Lun..Dom
   recent: any[];
 };
@@ -134,6 +135,22 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
       AND (${t2}::timestamptz IS NULL OR t.created_at < (${t2}::timestamptz + interval '1 day'))
     GROUP BY c.id, c.name, c.color HAVING COUNT(t.id) > 0 ORDER BY n DESC`;
 
+  // Tiempo de soporte por empresa: solo tickets resueltos (son los que tienen
+  // un tiempo de resolucion, automatico o manual, que tenga sentido sumar).
+  // resolution_minutes manual pisa el calculo automatico (resolved_at - created_at),
+  // igual que autoResolutionMinutes() en lib/dates.ts.
+  const timeByCompany = await q`
+    SELECT c.name, c.color, COUNT(t.id)::int AS n,
+      COALESCE(SUM(COALESCE(t.resolution_minutes, EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 60)), 0)::int AS total_minutes,
+      COALESCE(AVG(COALESCE(t.resolution_minutes, EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 60)), 0)::int AS avg_minutes
+    FROM companies c
+    JOIN tickets t ON t.company_id = c.id AND t.status = 'resuelto'
+      AND (${f}::timestamptz IS NULL OR t.created_at >= ${f}::timestamptz)
+      AND (${t2}::timestamptz IS NULL OR t.created_at < (${t2}::timestamptz + interval '1 day'))
+    GROUP BY c.id, c.name, c.color
+    HAVING COUNT(t.id) > 0
+    ORDER BY total_minutes DESC`;
+
   const dow = await q`
     SELECT EXTRACT(ISODOW FROM created_at)::int AS d, COUNT(*)::int AS n
     FROM tickets
@@ -168,6 +185,7 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
     maxDate: t.maxc,
     byCategory,
     byCompany: byCompany as any[],
+    timeByCompany: timeByCompany as any[],
     byDay,
     recent: recent as any[],
   };

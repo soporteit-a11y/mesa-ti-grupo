@@ -14,8 +14,9 @@
 >
 > **Fecha del traspaso:** 24 de agosto de 2026
 > **Última actualización:** 28 de agosto de 2026 — se corrigió un bug real de zona horaria (toda
-> fecha se mostraba en UTC crudo, 4 horas adelantada respecto a RD) y se agregó tiempo de
-> resolución por ticket (automático o manual). Ver §14 y §5.8/§5.9.
+> fecha se mostraba en UTC crudo, 4 horas adelantada respecto a RD), se agregó tiempo de
+> resolución por ticket (automático o manual), y el dashboard suma un panel de tiempo de soporte
+> por empresa. Ver §14 y §5.8/§5.9.
 > **Estado:** en producción y en uso real.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
@@ -300,6 +301,10 @@ y **Manual** (dos inputs, horas y minutos, que se guardan en `resolution_minutes
 Action `updateTicketResolutionTime`). Volver a Automático simplemente pone la columna en `NULL`
 otra vez — no se pierde nada, el valor manual anterior no se recupera pero tampoco hace falta:
 siempre puede volver a escribirse.
+
+**Agregado por ticket, ahora también agregado por empresa** (2026-08-28, misma fórmula
+`COALESCE(resolution_minutes, resolved_at - created_at)` reimplementada en SQL porque hace falta
+`SUM`/`AVG` entre filas): panel "Tiempo de soporte por empresa" en el dashboard, ver §11.
 
 ---
 
@@ -818,7 +823,29 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
-### 28 de agosto de 2026 — Zona horaria de RD + tiempo de resolución de tickets
+### 28 de agosto de 2026 (tanda 2) — Panel "Tiempo de soporte por empresa" en el dashboard
+
+Pedido inmediatamente después de agregar el tiempo de resolución (tanda 1 del mismo día): el
+usuario quería ver cuánto tiempo se invierte dando soporte a cada empresa, no solo por ticket.
+
+- `lib/data.ts`: `getSupportDashboard()` gana una consulta nueva, `timeByCompany` — por empresa,
+  entre los tickets **resueltos** del período filtrado (mismo `from`/`to` que el resto del
+  dashboard): cantidad, tiempo total y promedio. El tiempo efectivo por ticket es
+  `COALESCE(resolution_minutes, resolved_at - created_at)`, la misma regla que
+  `autoResolutionMinutes()` en `lib/dates.ts` (el override manual pisa el cálculo automático) —
+  se reimplementó en SQL porque es una agregación entre filas (`SUM`/`AVG`), no algo que se pueda
+  resolver reutilizando la función de TypeScript directamente.
+- `app/page.tsx`: nuevo panel en la columna 3, entre "Detalle de tickets por categoría" y
+  "Resumen" — tabla Empresa/Resueltos/Tiempo total/Promedio, usando `fmtDuration()` (ya existía,
+  de la tanda de tiempo de resolución). El nombre de cada empresa es un `<Link className="chip">`
+  a `/tickets?company=<nombre>&status=resuelto`, siguiendo el mismo patrón clicable que ya tenía
+  el panel "Tickets por empresa" — se reusó el patrón en vez de inventar una interacción nueva.
+- `app/globals.css`: `.chip` gana `text-decoration: none` (necesario porque ahora también se usa
+  como `<a>`, no solo como `<span>`; no cambia nada en los usos existentes).
+- Solo cuenta tickets con `status = 'resuelto'` — un ticket abierto no tiene un tiempo de soporte
+  "terminado" que sumar todavía.
+
+### 28 de agosto de 2026 (tanda 1) — Zona horaria de RD + tiempo de resolución de tickets
 
 El usuario pidió poder asignar cuánto tardó un ticket en resolverse, con dos modos: manual o
 según "el reloj mundial... Dominican Republic, UTC-4". Esa frase fue la pista de un bug real, no
@@ -1742,6 +1769,7 @@ export type SupportDashboard = {
   maxDate: string | null;
   byCategory: { category: string; n: number; pct: number }[];
   byCompany: any[];
+  timeByCompany: { name: string; color: string; n: number; total_minutes: number; avg_minutes: number }[];
   byDay: number[]; // Lun..Dom
   recent: any[];
 };
@@ -1780,6 +1808,22 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
       AND (${t2}::timestamptz IS NULL OR t.created_at < (${t2}::timestamptz + interval '1 day'))
     GROUP BY c.id, c.name, c.color HAVING COUNT(t.id) > 0 ORDER BY n DESC`;
 
+  // Tiempo de soporte por empresa: solo tickets resueltos (son los que tienen
+  // un tiempo de resolucion, automatico o manual, que tenga sentido sumar).
+  // resolution_minutes manual pisa el calculo automatico (resolved_at - created_at),
+  // igual que autoResolutionMinutes() en lib/dates.ts.
+  const timeByCompany = await q`
+    SELECT c.name, c.color, COUNT(t.id)::int AS n,
+      COALESCE(SUM(COALESCE(t.resolution_minutes, EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 60)), 0)::int AS total_minutes,
+      COALESCE(AVG(COALESCE(t.resolution_minutes, EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 60)), 0)::int AS avg_minutes
+    FROM companies c
+    JOIN tickets t ON t.company_id = c.id AND t.status = 'resuelto'
+      AND (${f}::timestamptz IS NULL OR t.created_at >= ${f}::timestamptz)
+      AND (${t2}::timestamptz IS NULL OR t.created_at < (${t2}::timestamptz + interval '1 day'))
+    GROUP BY c.id, c.name, c.color
+    HAVING COUNT(t.id) > 0
+    ORDER BY total_minutes DESC`;
+
   const dow = await q`
     SELECT EXTRACT(ISODOW FROM created_at)::int AS d, COUNT(*)::int AS n
     FROM tickets
@@ -1814,6 +1858,7 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
     maxDate: t.maxc,
     byCategory,
     byCompany: byCompany as any[],
+    timeByCompany: timeByCompany as any[],
     byDay,
     recent: recent as any[],
   };
@@ -2433,7 +2478,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
 ### `app/page.tsx`
 
-Dashboard. `Donut` dibuja las donas en SVG; el texto se centra con flexbox superpuesto, no con `text-anchor`. Columna 2 incluye el panel **Tickets por empresa** (usa `d.byCompany`, ya calculado por `getSupportDashboard()` pero sin usar hasta el 2026-08-25), con la barra pintada del color de cada empresa. Cada fila es un `<Link>` a `/tickets?company=<nombre>` desde el 2026-08-27 (mismo parámetro que ya filtraba `/tickets` y `/rutas`, §5.7 — no hizo falta tocar la página de tickets). El encabezado "📅 PERIODO" usa `periodLabel` (§14, 2026-08-26): el filtro elegido (`from`/`to`), no el rango de datos.
+Dashboard. `Donut` dibuja las donas en SVG; el texto se centra con flexbox superpuesto, no con `text-anchor`. Columna 2 incluye el panel **Tickets por empresa** (usa `d.byCompany`, ya calculado por `getSupportDashboard()` pero sin usar hasta el 2026-08-25), con la barra pintada del color de cada empresa. Cada fila es un `<Link>` a `/tickets?company=<nombre>` desde el 2026-08-27 (mismo parámetro que ya filtraba `/tickets` y `/rutas`, §5.7 — no hizo falta tocar la página de tickets). Columna 3 suma un panel **Tiempo de soporte por empresa** (2026-08-28): tabla con tickets resueltos, tiempo total y promedio por empresa (`d.timeByCompany`, calculado en `getSupportDashboard()`), con el nombre de cada empresa como `<Link className="chip">` a `/tickets?company=<nombre>&status=resuelto`. El encabezado "📅 PERIODO" usa `periodLabel` (§14, 2026-08-26): el filtro elegido (`from`/`to`), no el rango de datos.
 
 ```tsx
 import Link from "next/link";
@@ -2441,7 +2486,7 @@ import { hasDb } from "@/lib/db";
 import { getSupportDashboard } from "@/lib/data";
 import { Setup } from "@/components/Setup";
 import { DateRangeFilter } from "@/components/DateRangeFilter";
-import { drDayMonth, drYear, fmtDateTimeDR } from "@/lib/dates";
+import { drDayMonth, drYear, fmtDateTimeDR, fmtDuration } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -2647,6 +2692,34 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                 </tbody>
                 <tfoot><tr><td>TOTAL</td><td className="num">{d.total}</td><td className="pct-cell" style={{ justifyContent: "flex-end" }}>100%</td></tr></tfoot>
               </table>
+            </div>
+
+            <div className="panel">
+              <div className="panel-title">Tiempo de soporte por empresa</div>
+              {d.timeByCompany.length === 0 ? (
+                <p className="pv-meta">Aún no hay tickets resueltos con tiempo registrado en este período.</p>
+              ) : (
+                <table>
+                  <thead><tr><th>Empresa</th><th className="num">Resueltos</th><th className="num">Tiempo total</th><th className="num">Promedio</th></tr></thead>
+                  <tbody>
+                    {d.timeByCompany.map((c) => (
+                      <tr key={c.name}>
+                        <td>
+                          <Link href={`/tickets?company=${encodeURIComponent(c.name)}&status=resuelto`} className="chip" style={{ background: c.color }}>
+                            {c.name}
+                          </Link>
+                        </td>
+                        <td className="num">{c.n}</td>
+                        <td className="num mono">{fmtDuration(c.total_minutes)}</td>
+                        <td className="num mono">{fmtDuration(c.avg_minutes)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <p className="pv-meta" style={{ marginTop: 14 }}>
+                Suma el tiempo de resolución (automático o el que hayas ajustado a mano) de los tickets resueltos de cada empresa — sirve para estimar cuánto soporte consume cada una.
+              </p>
             </div>
 
             <div className="panel">
@@ -3381,7 +3454,7 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .pct-cell .mini-fill { height: 100%; background: var(--accent); }
 
 /* ---------- Chips / badges ---------- */
-.chip { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: #fff; }
+.chip { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: #fff; text-decoration: none; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .cat-tag { font-size: 12px; color: var(--ink-soft); }
 

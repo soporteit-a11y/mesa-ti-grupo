@@ -3,7 +3,7 @@ import { hasDb } from "@/lib/db";
 import { getSupportDashboard } from "@/lib/data";
 import { Setup } from "@/components/Setup";
 import { DateRangeFilter } from "@/components/DateRangeFilter";
-import { drDayMonth, drYear, fmtDateTimeDR } from "@/lib/dates";
+import { drDayMonth, drYear, fmtDateTimeDR, fmtDuration } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -209,6 +209,34 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
                 </tbody>
                 <tfoot><tr><td>TOTAL</td><td className="num">{d.total}</td><td className="pct-cell" style={{ justifyContent: "flex-end" }}>100%</td></tr></tfoot>
               </table>
+            </div>
+
+            <div className="panel">
+              <div className="panel-title">Tiempo de soporte por empresa</div>
+              {d.timeByCompany.length === 0 ? (
+                <p className="pv-meta">Aún no hay tickets resueltos con tiempo registrado en este período.</p>
+              ) : (
+                <table>
+                  <thead><tr><th>Empresa</th><th className="num">Resueltos</th><th className="num">Tiempo total</th><th className="num">Promedio</th></tr></thead>
+                  <tbody>
+                    {d.timeByCompany.map((c) => (
+                      <tr key={c.name}>
+                        <td>
+                          <Link href={`/tickets?company=${encodeURIComponent(c.name)}&status=resuelto`} className="chip" style={{ background: c.color }}>
+                            {c.name}
+                          </Link>
+                        </td>
+                        <td className="num">{c.n}</td>
+                        <td className="num mono">{fmtDuration(c.total_minutes)}</td>
+                        <td className="num mono">{fmtDuration(c.avg_minutes)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <p className="pv-meta" style={{ marginTop: 14 }}>
+                Suma el tiempo de resolución (automático o el que hayas ajustado a mano) de los tickets resueltos de cada empresa — sirve para estimar cuánto soporte consume cada una.
+              </p>
             </div>
 
             <div className="panel">
