@@ -9,14 +9,9 @@ import { RequesterControl } from "@/components/RequesterControl";
 import { TicketOpenLink } from "@/components/TicketOpenLink";
 import { TicketDetailDialog } from "@/components/TicketDetailDialog";
 import { slaInfo, fmtSlaHours } from "@/lib/priority";
+import { fmtDateDR as fmtDate } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
-
-function fmtDate(iso: string) {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
-}
 
 function SlaCell({ t }: { t: any }) {
   const s = slaInfo(t.created_at, t.resolved_at, t.status, t.cat_sla ?? 24, t.priority || "Baja");

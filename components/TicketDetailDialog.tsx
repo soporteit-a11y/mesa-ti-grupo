@@ -5,12 +5,8 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { updateTicket, addComment } from "@/app/actions";
 import { StatusControl } from "@/components/StatusControl";
 import { slaInfo, fmtSlaHours } from "@/lib/priority";
-
-function fmtDateTime(iso: string) {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
-}
+import { fmtDateTimeDR as fmtDateTime, autoResolutionMinutes } from "@/lib/dates";
+import { TicketResolutionTime } from "@/components/TicketResolutionTime";
 
 function SlaBadge({ ticket }: { ticket: any }) {
   const s = slaInfo(ticket.created_at, ticket.resolved_at, ticket.status, ticket.cat_sla ?? 24, ticket.priority || "Baja");
@@ -127,6 +123,12 @@ export function TicketDetailDialog({
             {savingTicket ? "Guardando..." : "Guardar cambios"}
           </button>
         </form>
+
+        <TicketResolutionTime
+          id={ticket.id}
+          resolutionMinutes={ticket.resolution_minutes ?? null}
+          autoMinutes={autoResolutionMinutes(ticket.created_at, ticket.resolved_at)}
+        />
 
         <div className="comments-block">
           <div className="cfg-head">Comentarios <span className="cfg-count">{ticket.comments.length}</span></div>

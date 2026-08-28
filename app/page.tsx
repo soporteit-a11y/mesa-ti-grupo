@@ -3,6 +3,7 @@ import { hasDb } from "@/lib/db";
 import { getSupportDashboard } from "@/lib/data";
 import { Setup } from "@/components/Setup";
 import { DateRangeFilter } from "@/components/DateRangeFilter";
+import { drDayMonth, drYear, fmtDateTimeDR } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -11,19 +12,13 @@ const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 function fmtPeriod(min: string | null, max: string | null) {
   if (!min || !max) return "—";
-  const a = new Date(min), b = new Date(max);
-  const f = (d: Date) => `${d.getUTCDate()} ${MESES[d.getUTCMonth()]}`;
-  return `${f(a)} – ${f(b)} ${b.getUTCFullYear()}`;
+  return `${drDayMonth(min, MESES)} – ${drDayMonth(max, MESES)} ${drYear(max)}`;
 }
 function fmtYMD(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return `${d} ${MESES[m - 1]} ${y}`;
 }
-function fmtDate(iso: string) {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
-}
+const fmtDate = fmtDateTimeDR;
 
 function Donut({ pct, label }: { pct: number; label: string }) {
   const r = 54;

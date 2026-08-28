@@ -6,7 +6,7 @@
 > quedó y qué hay que saber para continuar sin perder nada. La descripción técnica completa,
 > con el código fuente íntegro, está en **`HANDOFF.md`**, en esta misma carpeta.
 >
-> **Última sesión:** 27 de agosto de 2026
+> **Última sesión:** 28 de agosto de 2026
 > **Estado del sistema:** en producción, funcionando, sin incidencias abiertas.
 >
 > ### 👉 ¿Buscas qué hay que hacer? Está todo en **§3.bis · TODO LO PENDIENTE**

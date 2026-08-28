@@ -13,12 +13,9 @@
 > ya descubiertas.
 >
 > **Fecha del traspaso:** 24 de agosto de 2026
-> **Última actualización:** 27 de agosto de 2026 — el contenido usa todo el ancho disponible en
-> monitores grandes, el gráfico de empresas del dashboard enlaza a la bandeja filtrada,
-> categorías/colaboradores (con correo y celular) ya se pueden editar desde `/config`,
-> Colaboradores pasó a ser su propia sección de ancho completo, se eliminó una lista de
-> categorías fija que hacía que "Nuevo ticket" mostrara categorías ya borradas o renombradas, y
-> se validó la conexión con Vercel vía su MCP (ya no da 404 — nota vieja corregida). Ver §14.
+> **Última actualización:** 28 de agosto de 2026 — se corrigió un bug real de zona horaria (toda
+> fecha se mostraba en UTC crudo, 4 horas adelantada respecto a RD) y se agregó tiempo de
+> resolución por ticket (automático o manual). Ver §14 y §5.8/§5.9.
 > **Estado:** en producción y en uso real.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
@@ -266,6 +263,44 @@ Filtros y selección se guardan en `searchParams`, no en estado de React:
 Ventaja: los filtros son enlazables y sobreviven a recargas. El patrón para modificarlos siempre es
 leer `useSearchParams()`, clonar a `URLSearchParams`, mutar y `router.push()`.
 
+### 5.8 Zona horaria — todo se muestra en hora de República Dominicana
+
+**Bug real, corregido 2026-08-28:** las fechas se guardan en Postgres como `TIMESTAMPTZ` (instante
+UTC real), pero hasta este cambio `app/tickets/page.tsx`, `app/page.tsx` y
+`components/TicketDetailDialog.tsx` las formateaban con `getUTCDate()`/`getUTCHours()` — es decir,
+mostraban la hora UTC **etiquetada como si fuera hora local**, 4 horas adelantada respecto a
+Santo Domingo. El usuario lo notó comparando contra el reloj real ("Current time in Dominican
+Republic... UTC-4").
+
+**`lib/dates.ts` es ahora la única fuente de conversión de fecha/hora del proyecto.** Usa
+`Intl.DateTimeFormat` con `timeZone: "America/Santo_Domingo"` (UTC-4 fijo, sin horario de
+verano — la RD no lo usa) en vez de aritmética manual de offset, así que es correcto sin importar
+en qué zona horaria corra el servidor. Exporta:
+
+- `fmtDateDR(iso)` → `"DD/MM/YYYY"` (columna "Creado" de `/tickets`).
+- `fmtDateTimeDR(iso)` → `"DD/MM/YYYY HH:mm"` (dashboard, detalle de ticket, comentarios).
+- `drDayMonth(iso, meses)` / `drYear(iso)` → para el período del dashboard (`fmtPeriod`).
+- `autoResolutionMinutes(createdAt, resolvedAt)` y `fmtDuration(minutes)` → ver §5.9.
+
+**Si agregas una pantalla nueva que muestre una fecha, usa `lib/dates.ts`.** Volver a escribir
+`getUTCDate()`/`getUTCHours()` a mano reintroduce exactamente este bug.
+
+### 5.9 Tiempo de resolución (agregado 2026-08-28)
+
+`tickets.resolution_minutes` (INT, nullable) guarda una duración manual en minutos que **sobrescribe**
+el cálculo automático. Cuando es `NULL` (el caso normal), el tiempo de resolución se calcula solo:
+`autoResolutionMinutes()` en `lib/dates.ts` resta `created_at` de `resolved_at` — esto es un cálculo
+de duración (diferencia entre dos instantes), así que **no depende de la zona horaria**: da el
+mismo resultado sin importar en qué huso se muestren esas fechas. La zona horaria solo importa para
+mostrar *cuándo* pasó algo (§5.8), no para calcular *cuánto* duró.
+
+`components/TicketResolutionTime.tsx` (nuevo, en `TicketDetailDialog`) deja elegir entre
+**Automático** (el cálculo de arriba; muestra "se calcula al resolver" si el ticket sigue abierto)
+y **Manual** (dos inputs, horas y minutos, que se guardan en `resolution_minutes` vía la Server
+Action `updateTicketResolutionTime`). Volver a Automático simplemente pone la columna en `NULL`
+otra vez — no se pierde nada, el valor manual anterior no se recupera pero tampoco hace falta:
+siempre puede volver a escribirse.
+
 ---
 
 ## 6. Modelo de datos
@@ -280,7 +315,7 @@ categories        (id, name UNIQUE, sla_hours DEFAULT 24)
 collaborators     (id, name UNIQUE, company_id → companies, email, phone)
 tickets           (id, title, description, company_id → companies,
                    category, priority, status DEFAULT 'resuelto', requester,
-                   created_at, updated_at, resolved_at)
+                   created_at, updated_at, resolved_at, resolution_minutes)
 ticket_comments   (id, ticket_id → tickets ON DELETE CASCADE, author, text, created_at)
 initiatives       (id, company_id → companies, title, area,
                    status DEFAULT 'planificado', owner, due_date, created_at)
@@ -302,6 +337,9 @@ canned_responses  (id, title UNIQUE, text)
   (`updateCategory`), pero la deuda de fondo (columna de texto libre, no clave foránea) no se tocó.
 - **`collaborators.email` / `collaborators.phone`** (agregadas 2026-08-27): datos de contacto
   opcionales, editables desde `/config` junto con el nombre y la empresa del colaborador.
+- **`tickets.resolution_minutes`** (agregada 2026-08-28): override manual del tiempo de
+  resolución, en minutos. `NULL` = usar el cálculo automático (`resolved_at - created_at`). Ver
+  §5.9.
 - **`initiatives.due_date`** (agregada 2026-08-25): fecha límite opcional de la ruta, editable en
   línea desde `<InitiativeDueDate>`. `dueInfo()` en `app/rutas/page.tsx` la compara contra hoy para
   mostrar el chip "Atrasado Xd" / "Vence en Xd"; una ruta `completado` nunca se marca atrasada.
@@ -451,7 +489,8 @@ helpdesk/
 ├── lib/
 │   ├── db.ts                 # conexión + ensureSchema() + semillas
 │   ├── data.ts               # todas las consultas de lectura
-│   └── priority.ts           # constantes + cálculo de SLA
+│   ├── priority.ts           # constantes + cálculo de SLA
+│   └── dates.ts              # unica fuente de fecha/hora en zona RD + duracion de resolucion
 │
 └── components/
     ├── NavLink.tsx                 # enlace lateral: icono, activo e insignia de avisos
@@ -462,6 +501,7 @@ helpdesk/
     ├── NewTicketDialog.tsx         # diálogo de alta de ticket
     ├── TicketOpenLink.tsx          # título clicable → ?ticket=N
     ├── TicketDetailDialog.tsx      # detalle: edición + comentarios + SLA + respuestas rápidas
+    ├── TicketResolutionTime.tsx    # tiempo de resolución: automático o manual
     ├── StatusControl.tsx           # select de estado que auto-guarda
     ├── RequesterControl.tsx        # select de solicitante que auto-guarda
     ├── CollaboratorsDialog.tsx     # alta rápida de colaboradores desde /tickets
@@ -476,7 +516,7 @@ helpdesk/
     └── AddTaskForm.tsx             # input "+ Agregar tarea"
 ```
 
-**39 archivos** sin contar `node_modules`, `.next` ni `package-lock.json`.
+**41 archivos** sin contar `node_modules`, `.next` ni `package-lock.json`.
 
 ---
 
@@ -670,9 +710,10 @@ Tabla con 9 columnas: `#`, Asunto, Solicitante, Empresa, Categoría, Prioridad, 
 - Cinco filtros combinables arriba, todos por URL.
 
 **Diálogo de detalle** (`TicketDetailDialog`): formulario completo de edición (asunto, descripción,
-empresa, categoría, prioridad, solicitante) + insignia de SLA + hilo de comentarios con autor y
-fecha + desplegable "💬 Insertar respuesta rápida…" que rellena el área de comentario al vuelo,
-sin ida y vuelta al servidor.
+empresa, categoría, prioridad, solicitante) + insignia de SLA + **tiempo de resolución**
+(`<TicketResolutionTime>`, agregado 2026-08-28 — automático o manual, ver §5.9) + hilo de
+comentarios con autor y fecha + desplegable "💬 Insertar respuesta rápida…" que rellena el área de
+comentario al vuelo, sin ida y vuelta al servidor.
 
 ### Rutas de trabajo (`/rutas`)
 
@@ -776,6 +817,35 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 28 de agosto de 2026 — Zona horaria de RD + tiempo de resolución de tickets
+
+El usuario pidió poder asignar cuánto tardó un ticket en resolverse, con dos modos: manual o
+según "el reloj mundial... Dominican Republic, UTC-4". Esa frase fue la pista de un bug real, no
+solo el pedido de una función nueva.
+
+**El bug (encontrado antes de escribir nada, por inspección de código):** `app/tickets/page.tsx`,
+`app/page.tsx` y `components/TicketDetailDialog.tsx` formateaban las fechas con
+`getUTCDate()`/`getUTCHours()` sobre timestamps que son instantes UTC reales (`TIMESTAMPTZ` en
+Postgres) — es decir, mostraban la hora UTC etiquetada como si fuera hora local. Verificado con
+Node: `2026-08-28T20:54:00Z` (20:54 UTC) formateado con `Intl.DateTimeFormat` y
+`timeZone: "America/Santo_Domingo"` da **16:54**, la hora real en RD. La app mostraba "20:54" en
+vez de "16:54" — 4 horas adelantada, todo el tiempo, en cada fecha de toda la aplicación.
+
+- **`lib/dates.ts` (nuevo):** única fuente de conversión de fecha/hora del proyecto, ver §5.8.
+  `fmtDateDR`, `fmtDateTimeDR`, `drDayMonth`, `drYear` reemplazan la aritmética manual de UTC en
+  los tres archivos de arriba.
+- **Tiempo de resolución (§5.9):** `tickets.resolution_minutes` (INT, nullable) guarda un override
+  manual en minutos. `autoResolutionMinutes()` calcula `resolved_at - created_at` cuando es
+  `NULL` — esta resta es una duración entre dos instantes, así que da el mismo resultado sin
+  importar la zona horaria de visualización (la zona horaria solo afecta *cuándo* se muestra que
+  pasó algo, no *cuánto* duró).
+- **`components/TicketResolutionTime.tsx` (nuevo):** en `TicketDetailDialog`, radio Automático /
+  Manual + inputs de horas y minutos para el modo manual. Nueva Server Action
+  `updateTicketResolutionTime`.
+- Verificado con Node antes de desplegar que `Intl.DateTimeFormat` soporta
+  `America/Santo_Domingo` en el runtime (usa datos ICU del propio Node, no una librería nueva —
+  sigue la regla de "sin dependencias nuevas").
 
 ### 27 de agosto de 2026 (tanda 4) — Validación de la conexión con Vercel (sin cambios de código)
 
@@ -1280,7 +1350,8 @@ async function init(q: NonNullable<typeof sql>) {
     requester TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
-    resolved_at TIMESTAMPTZ
+    resolved_at TIMESTAMPTZ,
+    resolution_minutes INT
   )`;
   await q`CREATE TABLE IF NOT EXISTS initiatives (
     id SERIAL PRIMARY KEY, company_id INT REFERENCES companies(id),
@@ -1320,6 +1391,7 @@ async function init(q: NonNullable<typeof sql>) {
   await q`ALTER TABLE initiatives ADD COLUMN IF NOT EXISTS due_date DATE`;
   await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS email TEXT`;
   await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS phone TEXT`;
+  await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolution_minutes INT`;
   try { await q`ALTER TABLE tickets ALTER COLUMN priority DROP NOT NULL`; } catch (e) {}
 
   // Limpieza de columnas y tabla del modelo de priorizacion P1-P4, ya sin uso (2026-08-25).
@@ -1868,13 +1940,79 @@ export function fmtSlaHours(h: number): string {
 }
 ```
 
+### `lib/dates.ts`
+
+Única fuente de conversión de fecha/hora del proyecto (agregado 2026-08-28, §5.8). Antes de este
+archivo, cada pantalla mostraba la hora UTC guardada en Postgres como si fuera hora local — 4
+horas adelantada respecto a Santo Domingo.
+
+```ts
+// Todas las fechas se guardan en Postgres como TIMESTAMPTZ (UTC real). Esta es
+// la UNICA fuente de conversion a hora de Republica Dominicana (UTC-4, sin
+// horario de verano) — antes cada pantalla llamaba getUTCHours()/getUTCDate()
+// directamente, que muestra la hora UTC como si fuera local (4 horas adelantada).
+const DR_TZ = "America/Santo_Domingo";
+
+function drParts(iso: string) {
+  const d = new Date(iso);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: DR_TZ,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+  let hour = get("hour");
+  if (hour === "24") hour = "00"; // Intl con hour12:false a veces da "24" para medianoche
+  return { year: get("year"), month: get("month"), day: get("day"), hour, minute: get("minute") };
+}
+
+export function fmtDateDR(iso: string): string {
+  const p = drParts(iso);
+  return `${p.day}/${p.month}/${p.year}`;
+}
+
+export function fmtDateTimeDR(iso: string): string {
+  const p = drParts(iso);
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
+}
+
+export function drDayMonth(iso: string, meses: string[]): string {
+  const p = drParts(iso);
+  return `${Number(p.day)} ${meses[Number(p.month) - 1]}`;
+}
+
+export function drYear(iso: string): number {
+  return Number(drParts(iso).year);
+}
+
+/* ---------- Tiempo de resolucion (duracion creado -> resuelto) ---------- */
+
+export function autoResolutionMinutes(createdAt: string, resolvedAt: string | null): number | null {
+  if (!resolvedAt) return null;
+  const mins = Math.round((new Date(resolvedAt).getTime() - new Date(createdAt).getTime()) / 60000);
+  return Math.max(0, mins);
+}
+
+export function fmtDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const mins = minutes % 60;
+  const parts: string[] = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (!days && mins) parts.push(`${mins}m`);
+  return parts.join(" ") || "0m";
+}
+```
+
 ---
 
 ## 15.3 Server Actions
 
 ### `app/actions.ts`
 
-Las 27 mutaciones del sistema, todas con el patrón de cinco pasos.
+Las 28 mutaciones del sistema, todas con el patrón de cinco pasos.
 
 ```ts
 "use server";
@@ -2051,6 +2189,22 @@ export async function updateTicket(formData: FormData) {
 
   revalidatePath("/tickets");
   revalidatePath("/");
+}
+
+export async function updateTicketResolutionTime(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const mode = String(formData.get("mode") || "auto");
+  if (!id) return;
+  if (mode === "manual") {
+    const hours = Number(formData.get("hours") || 0);
+    const minutes = Number(formData.get("minutes") || 0);
+    const total = Math.max(0, Math.round(hours * 60 + minutes));
+    await sql!`UPDATE tickets SET resolution_minutes = ${total} WHERE id = ${id}`;
+  } else {
+    await sql!`UPDATE tickets SET resolution_minutes = NULL WHERE id = ${id}`;
+  }
+  revalidatePath("/tickets");
 }
 
 export async function addComment(formData: FormData) {
@@ -2287,6 +2441,7 @@ import { hasDb } from "@/lib/db";
 import { getSupportDashboard } from "@/lib/data";
 import { Setup } from "@/components/Setup";
 import { DateRangeFilter } from "@/components/DateRangeFilter";
+import { drDayMonth, drYear, fmtDateTimeDR } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -2295,19 +2450,13 @@ const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 function fmtPeriod(min: string | null, max: string | null) {
   if (!min || !max) return "—";
-  const a = new Date(min), b = new Date(max);
-  const f = (d: Date) => `${d.getUTCDate()} ${MESES[d.getUTCMonth()]}`;
-  return `${f(a)} – ${f(b)} ${b.getUTCFullYear()}`;
+  return `${drDayMonth(min, MESES)} – ${drDayMonth(max, MESES)} ${drYear(max)}`;
 }
 function fmtYMD(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return `${d} ${MESES[m - 1]} ${y}`;
 }
-function fmtDate(iso: string) {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
-}
+const fmtDate = fmtDateTimeDR;
 
 function Donut({ pct, label }: { pct: number; label: string }) {
   const r = 54;
@@ -2546,14 +2695,9 @@ import { RequesterControl } from "@/components/RequesterControl";
 import { TicketOpenLink } from "@/components/TicketOpenLink";
 import { TicketDetailDialog } from "@/components/TicketDetailDialog";
 import { slaInfo, fmtSlaHours } from "@/lib/priority";
+import { fmtDateDR as fmtDate } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
-
-function fmtDate(iso: string) {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
-}
 
 function SlaCell({ t }: { t: any }) {
   const s = slaInfo(t.created_at, t.resolved_at, t.status, t.cat_sla ?? 24, t.priority || "Baja");
@@ -3319,6 +3463,15 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 dialog.ticket-detail { max-width: 640px; }
 .ticket-detail .dialog-body { max-height: 72vh; overflow-y: auto; }
 .ticket-meta-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.restime { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.restime-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.restime-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
+.restime-value { font-size: 13px; color: var(--ink); font-weight: 600; }
+.restime-modes { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-soft); }
+.restime-opt { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.restime-manual { display: flex; align-items: center; gap: 6px; }
+.restime-input { width: 56px; font-size: 12.5px; padding: 5px 6px; text-align: right; font-variant-numeric: tabular-nums; }
+
 .comments-block { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
 .comments-list { display: flex; flex-direction: column; gap: 10px; margin: 12px 0 16px; max-height: 240px; overflow-y: auto; }
 .comment-item { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
@@ -4039,12 +4192,8 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { updateTicket, addComment } from "@/app/actions";
 import { StatusControl } from "@/components/StatusControl";
 import { slaInfo, fmtSlaHours } from "@/lib/priority";
-
-function fmtDateTime(iso: string) {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
-}
+import { fmtDateTimeDR as fmtDateTime, autoResolutionMinutes } from "@/lib/dates";
+import { TicketResolutionTime } from "@/components/TicketResolutionTime";
 
 function SlaBadge({ ticket }: { ticket: any }) {
   const s = slaInfo(ticket.created_at, ticket.resolved_at, ticket.status, ticket.cat_sla ?? 24, ticket.priority || "Baja");
@@ -4162,6 +4311,12 @@ export function TicketDetailDialog({
           </button>
         </form>
 
+        <TicketResolutionTime
+          id={ticket.id}
+          resolutionMinutes={ticket.resolution_minutes ?? null}
+          autoMinutes={autoResolutionMinutes(ticket.created_at, ticket.resolved_at)}
+        />
+
         <div className="comments-block">
           <div className="cfg-head">Comentarios <span className="cfg-count">{ticket.comments.length}</span></div>
           <div className="comments-list">
@@ -4220,6 +4375,68 @@ export function TicketDetailDialog({
         </div>
       </div>
     </dialog>
+  );
+}
+```
+
+### `components/TicketResolutionTime.tsx`
+
+Tiempo de resolución del ticket, automático o manual (agregado 2026-08-28, §5.9). Vive fuera del
+`<form>` principal de `TicketDetailDialog` porque tiene su propia Server Action
+(`updateTicketResolutionTime`) — un `<form>` no puede anidar otro.
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import { updateTicketResolutionTime } from "@/app/actions";
+import { fmtDuration } from "@/lib/dates";
+
+export function TicketResolutionTime({
+  id, resolutionMinutes, autoMinutes,
+}: { id: number; resolutionMinutes: number | null; autoMinutes: number | null }) {
+  const [mode, setMode] = useState<"auto" | "manual">(resolutionMinutes != null ? "manual" : "auto");
+  const [hours, setHours] = useState(resolutionMinutes != null ? Math.floor(resolutionMinutes / 60) : 0);
+  const [minutes, setMinutes] = useState(resolutionMinutes != null ? resolutionMinutes % 60 : 0);
+
+  const effective = mode === "manual" ? hours * 60 + minutes : autoMinutes;
+
+  return (
+    <form action={updateTicketResolutionTime} className="restime">
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="mode" value={mode} />
+      <div className="restime-head">
+        <span className="restime-label">Tiempo de resolución</span>
+        <span className="restime-value mono">{effective != null ? fmtDuration(effective) : "— sin resolver aún —"}</span>
+      </div>
+      <div className="restime-modes">
+        <label className="restime-opt">
+          <input type="radio" name="mode-radio" checked={mode === "auto"} onChange={() => setMode("auto")} />
+          Automático{autoMinutes != null ? ` (${fmtDuration(autoMinutes)}, creado → resuelto)` : " (se calcula al resolver)"}
+        </label>
+        <label className="restime-opt">
+          <input type="radio" name="mode-radio" checked={mode === "manual"} onChange={() => setMode("manual")} />
+          Manual
+        </label>
+      </div>
+      {mode === "manual" && (
+        <div className="restime-manual">
+          <input
+            type="number" name="hours" min={0} value={hours}
+            onChange={(e) => setHours(Math.max(0, Number(e.target.value)))}
+            className="restime-input"
+          />
+          <span className="pv-meta">h</span>
+          <input
+            type="number" name="minutes" min={0} max={59} value={minutes}
+            onChange={(e) => setMinutes(Math.max(0, Math.min(59, Number(e.target.value))))}
+            className="restime-input"
+          />
+          <span className="pv-meta">m</span>
+        </div>
+      )}
+      <button type="submit" className="btn sm">Guardar</button>
+    </form>
   );
 }
 ```

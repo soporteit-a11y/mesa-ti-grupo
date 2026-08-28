@@ -34,7 +34,8 @@ async function init(q: NonNullable<typeof sql>) {
     requester TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
-    resolved_at TIMESTAMPTZ
+    resolved_at TIMESTAMPTZ,
+    resolution_minutes INT
   )`;
   await q`CREATE TABLE IF NOT EXISTS initiatives (
     id SERIAL PRIMARY KEY, company_id INT REFERENCES companies(id),
@@ -74,6 +75,7 @@ async function init(q: NonNullable<typeof sql>) {
   await q`ALTER TABLE initiatives ADD COLUMN IF NOT EXISTS due_date DATE`;
   await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS email TEXT`;
   await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS phone TEXT`;
+  await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolution_minutes INT`;
   try { await q`ALTER TABLE tickets ALTER COLUMN priority DROP NOT NULL`; } catch (e) {}
 
   // Limpieza de columnas y tabla del modelo de priorizacion P1-P4, ya sin uso (2026-08-25).

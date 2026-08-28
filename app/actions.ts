@@ -174,6 +174,22 @@ export async function updateTicket(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function updateTicketResolutionTime(formData: FormData) {
+  await ensureSchema();
+  const id = Number(formData.get("id"));
+  const mode = String(formData.get("mode") || "auto");
+  if (!id) return;
+  if (mode === "manual") {
+    const hours = Number(formData.get("hours") || 0);
+    const minutes = Number(formData.get("minutes") || 0);
+    const total = Math.max(0, Math.round(hours * 60 + minutes));
+    await sql!`UPDATE tickets SET resolution_minutes = ${total} WHERE id = ${id}`;
+  } else {
+    await sql!`UPDATE tickets SET resolution_minutes = NULL WHERE id = ${id}`;
+  }
+  revalidatePath("/tickets");
+}
+
 export async function addComment(formData: FormData) {
   await ensureSchema();
   const ticket_id = Number(formData.get("ticket_id"));
