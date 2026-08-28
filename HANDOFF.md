@@ -17,7 +17,11 @@
 > fecha se mostraba en UTC crudo, 4 horas adelantada respecto a RD), se agregó tiempo de
 > resolución por ticket (automático o manual), y el dashboard suma un panel de tiempo de soporte
 > por empresa. Ver §14 y §5.8/§5.9.
-> **Estado:** en producción y en uso real.
+> **Estado:** en producción y en uso real. **Excepción puntual:** el commit `abfde59` (panel de
+> tiempo de soporte por empresa) está confirmado en GitHub (`main`) pero, a diferencia de los ~15
+> pushes anteriores de esta misma sesión —que Vercel desplegaba en segundos—, este quedó varios
+> minutos sin disparar un build nuevo. Ver §10 (nueva sección "El auto-deploy puede estancarse")
+> antes de asumir que lo último en el repo ya está en `mesa-ti-grupo-delta.vercel.app`.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
 > el código y no actualizas esto, el traspaso deja de servir.
@@ -643,6 +647,27 @@ document.querySelectorAll('.init-del').length        // botones de borrar ruta
 ```
 
 Un despliegue tarda entre 1 y 3 minutos en propagarse al alias de producción.
+
+### El auto-deploy puede estancarse (visto por primera vez 2026-08-28)
+
+Todos los pushes de esta sesión (~15) dispararon un build en Vercel en cuestión de segundos —
+hasta el commit `abfde59` (panel de tiempo de soporte por empresa), que se confirmó en GitHub
+(`main`, verificado con la API pública de GitHub, no solo con `git log`) pero **no** disparó un
+build nuevo durante varios minutos. `get_project` seguía devolviendo el `latestDeployment`
+anterior mucho después de lo que tardaban los pushes previos.
+
+**Qué hacer si vuelve a pasar:**
+1. Confirma primero que el push llegó de verdad a GitHub —no asumas que el problema es tuyo—:
+   `curl -s https://api.github.com/repos/soporteit-a11y/mesa-ti-grupo/commits/main` y compara el
+   `sha` contra tu `git log`.
+2. Si el commit sí está en GitHub pero Vercel no lo recogió, es un problema de la integración
+   Git↔Vercel (webhook), no del código ni del push. No hay una causa raíz confirmada todavía.
+3. Con el MCP de Vercel conectado (§ validación de conexión, 2026-08-27), sondea
+   `get_project`/`list_deployments` cada tanto en vez de asumir que ya se propagó — no reintentes
+   el push, el commit ya está bien donde tiene que estar.
+4. Si se prolonga demasiado, la vía manual de respaldo documentada en este mismo documento (Vercel
+   CLI, §10, "sin sesión iniciada") sigue existiendo como plan B, aunque implica iniciar sesión
+   primero.
 
 ---
 

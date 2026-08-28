@@ -290,6 +290,14 @@ confirmar también contra la URL pública** (§1), que no depende de ningún tok
 Al conectar el repo a Vercel, este **no** despliega lo que ya existe: espera al siguiente push.
 Hizo falta un commit nuevo para arrancar el primer despliegue. No es un fallo de configuración.
 
+### 5.2bis El auto-deploy a veces se estanca (visto 2026-08-28)
+
+Un push (`abfde59`) confirmado en GitHub tardó varios minutos en aparecer siquiera como build en
+Vercel, después de ~15 pushes seguidos en la misma sesión que se recogían en segundos. Antes de
+sospechar del código: confirma el commit en GitHub directo
+(`curl https://api.github.com/repos/soporteit-a11y/mesa-ti-grupo/commits/main`), y si ya está ahí,
+el problema es el webhook Git↔Vercel, no el push. Detalle completo en HANDOFF.md §10.
+
 ### 5.4 Credencial cruzada de GitHub
 
 La máquina tiene guardada en Git Credential Manager la cuenta **`aiportal-dev`**, que **no** tiene
