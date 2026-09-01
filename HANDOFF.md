@@ -13,15 +13,13 @@
 > ya descubiertas.
 >
 > **Fecha del traspaso:** 24 de agosto de 2026
-> **Última actualización:** 28 de agosto de 2026 — se corrigió un bug real de zona horaria (toda
-> fecha se mostraba en UTC crudo, 4 horas adelantada respecto a RD), se agregó tiempo de
-> resolución por ticket (automático o manual), y el dashboard suma un panel de tiempo de soporte
-> por empresa. Ver §14 y §5.8/§5.9.
-> **Estado:** en producción y en uso real. **Excepción puntual:** el commit `abfde59` (panel de
-> tiempo de soporte por empresa) está confirmado en GitHub (`main`) pero, a diferencia de los ~15
-> pushes anteriores de esta misma sesión —que Vercel desplegaba en segundos—, este quedó varios
-> minutos sin disparar un build nuevo. Ver §10 (nueva sección "El auto-deploy puede estancarse")
-> antes de asumir que lo último en el repo ya está en `mesa-ti-grupo-delta.vercel.app`.
+> **Última actualización:** 1 de septiembre de 2026 — el panel "Tickets por categoría" del
+> dashboard ahora se divide en "Categorías actuales" y "Categorías anteriores" (Top 5 cada una),
+> porque tras reorganizar categorías en Configuración quedaban tickets viejos con nombres de
+> categoría que ya no existen, mezclados con las pocas categorías nuevas. Ver §5.10.
+> **Estado:** en producción y en uso real. El episodio de auto-deploy estancado del commit
+> `abfde59` (documentado antes aquí) se resolvió solo — el build siguiente lo alcanzó y quedó
+> confirmado en vivo; ver §10 igual por si vuelve a pasar.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
 > el código y no actualizas esto, el traspaso deja de servir.
@@ -309,6 +307,30 @@ siempre puede volver a escribirse.
 **Agregado por ticket, ahora también agregado por empresa** (2026-08-28, misma fórmula
 `COALESCE(resolution_minutes, resolved_at - created_at)` reimplementada en SQL porque hace falta
 `SUM`/`AVG` entre filas): panel "Tiempo de soporte por empresa" en el dashboard, ver §11.
+
+### 5.10 Categorías actuales vs. anteriores en el dashboard (agregado 2026-09-01)
+
+`tickets.category` guarda el nombre de la categoría **tal como estaba al crear el ticket** —es
+texto libre, no una foreign key—, mientras que `categories` (tabla de configuración) tiene el
+nombre **actual**. Cuando Eddy renombra o elimina una categoría en `/config`, los tickets viejos
+se quedan con el nombre anterior. El panel "Tickets por categoría" del dashboard antes mezclaba
+todo en un solo Top 9, así que categorías ya renombradas/eliminadas (con meses de tickets
+acumulados) tapaban a las categorías nuevas (con pocos tickets todavía, por ser recientes).
+
+La consulta `cat` en `getSupportDashboard()` (`lib/data.ts`) ahora hace
+`LEFT JOIN categories c2 ON c2.name = t.category` y agrega `is_current` (`BOOL_OR(c2.id IS NOT NULL)`)
+por cada categoría agrupada. `byCategory` expone ese flag como `isCurrent`. En `app/page.tsx`:
+
+```ts
+const currentCats = d.byCategory.filter((c) => c.isCurrent).slice(0, 5);
+const oldCats = d.byCategory.filter((c) => !c.isCurrent).slice(0, 5);
+```
+
+El panel muestra dos grupos, "Categorías actuales" y "Categorías anteriores", cada uno Top 5 —no
+Top 9 combinado como antes. Si algún grupo queda vacío (por ejemplo, todavía no hay tickets en
+ninguna categoría nueva) se muestra un mensaje en vez de una lista vacía. La tabla "Detalle de
+tickets por categoría" (columna 3) no cambió: sigue listando **todas** las categorías sin dividir,
+porque ahí el objetivo es el detalle completo, no un resumen.
 
 ---
 
@@ -847,6 +869,24 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 1 de septiembre de 2026 — Categorías actuales vs. anteriores en el Top del dashboard
+
+El usuario reportó que el panel "Tickets por categoría" (antes un Top 9 combinado) ya no
+reflejaba bien la realidad: tras reorganizar categorías en `/config`, las categorías nuevas
+tenían pocos tickets todavía y quedaban tapadas por categorías viejas (renombradas o eliminadas)
+que arrastraban meses de historial.
+
+- `lib/data.ts`: la consulta `cat` de `getSupportDashboard()` agrega
+  `LEFT JOIN categories c2 ON c2.name = t.category` y `BOOL_OR(c2.id IS NOT NULL) AS is_current`
+  por categoría agrupada. `byCategory` gana el campo `isCurrent`.
+- `app/page.tsx`: `topCats` (Top 9 combinado) se reemplaza por `currentCats` y `oldCats`
+  (`d.byCategory.filter(...).slice(0, 5)` cada una). El panel muestra dos grupos —"Categorías
+  actuales" y "Categorías anteriores"— cada uno Top 5, con mensaje si algún grupo queda vacío.
+- `app/globals.css`: nueva clase `.cat-group-title` para el subtítulo de cada grupo dentro del
+  panel.
+- La tabla "Detalle de tickets por categoría" (columna 3) no se tocó — sigue mostrando todas las
+  categorías sin dividir, porque ahí el objetivo es el detalle completo. Ver §5.10.
 
 ### 28 de agosto de 2026 (tanda 2) — Panel "Tiempo de soporte por empresa" en el dashboard
 
@@ -1792,7 +1832,7 @@ export type SupportDashboard = {
   breached: number;
   minDate: string | null;
   maxDate: string | null;
-  byCategory: { category: string; n: number; pct: number }[];
+  byCategory: { category: string; n: number; pct: number; isCurrent: boolean }[];
   byCompany: any[];
   timeByCompany: { name: string; color: string; n: number; total_minutes: number; avg_minutes: number }[];
   byDay: number[]; // Lun..Dom
@@ -1820,10 +1860,12 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
       AND (${t2}::timestamptz IS NULL OR t.created_at < (${t2}::timestamptz + interval '1 day'))`;
 
   const cat = await q`
-    SELECT COALESCE(NULLIF(category, ''), 'Otros') AS category, COUNT(*)::int AS n
-    FROM tickets
-    WHERE (${f}::timestamptz IS NULL OR created_at >= ${f}::timestamptz)
-      AND (${t2}::timestamptz IS NULL OR created_at < (${t2}::timestamptz + interval '1 day'))
+    SELECT COALESCE(NULLIF(t.category, ''), 'Otros') AS category, COUNT(*)::int AS n,
+      BOOL_OR(c2.id IS NOT NULL) AS is_current
+    FROM tickets t
+    LEFT JOIN categories c2 ON c2.name = t.category
+    WHERE (${f}::timestamptz IS NULL OR t.created_at >= ${f}::timestamptz)
+      AND (${t2}::timestamptz IS NULL OR t.created_at < (${t2}::timestamptz + interval '1 day'))
     GROUP BY 1 ORDER BY n DESC, category`;
 
   const byCompany = await q`
@@ -1869,6 +1911,7 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
     category: r.category,
     n: r.n,
     pct: total ? Math.round((r.n / total) * 100) : 0,
+    isCurrent: !!r.is_current,
   }));
 
   const byDay = [0, 0, 0, 0, 0, 0, 0]; // ISODOW 1=Lun .. 7=Dom
@@ -2565,7 +2608,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
   const maxCat = Math.max(1, ...d.byCategory.map((c) => c.n));
   const maxCompany = Math.max(1, ...d.byCompany.map((c: any) => c.n));
   const maxDay = Math.max(1, ...d.byDay);
-  const topCats = d.byCategory.slice(0, 9);
+  const currentCats = d.byCategory.filter((c) => c.isCurrent).slice(0, 5);
+  const oldCats = d.byCategory.filter((c) => !c.isCurrent).slice(0, 5);
 
   return (
     <>
@@ -2646,19 +2690,40 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
           {/* Columna 2 */}
           <div className="col">
             <div className="panel">
-              <div className="panel-title">Tickets por categoría <span className="small">(Top {topCats.length})</span></div>
-              <div className="catbars">
-                {topCats.map((c) => (
-                  <div className="catbar" key={c.category}>
-                    <div className="cb-top">
-                      <span className="cb-name">{c.category}</span>
-                      <span className="cb-val"><b>{c.n}</b> ({c.pct}%)</span>
+              <div className="panel-title">Tickets por categoría</div>
+              <div className="cat-group-title">Categorías actuales (Top {currentCats.length})</div>
+              {currentCats.length === 0 ? (
+                <p className="pv-meta">Sin tickets en categorías actuales todavía.</p>
+              ) : (
+                <div className="catbars">
+                  {currentCats.map((c) => (
+                    <div className="catbar" key={c.category}>
+                      <div className="cb-top">
+                        <span className="cb-name">{c.category}</span>
+                        <span className="cb-val"><b>{c.n}</b> ({c.pct}%)</span>
+                      </div>
+                      <div className="catbar-track"><div className="catbar-fill" style={{ width: `${(c.n / maxCat) * 100}%` }} /></div>
                     </div>
-                    <div className="catbar-track"><div className="catbar-fill" style={{ width: `${(c.n / maxCat) * 100}%` }} /></div>
-                  </div>
-                ))}
-              </div>
-              <p className="pv-meta" style={{ marginTop: 14 }}>Total: {d.total} tickets</p>
+                  ))}
+                </div>
+              )}
+              <div className="cat-group-title">Categorías anteriores (Top {oldCats.length})</div>
+              {oldCats.length === 0 ? (
+                <p className="pv-meta">No hay tickets en categorías que ya no existen en la configuración.</p>
+              ) : (
+                <div className="catbars">
+                  {oldCats.map((c) => (
+                    <div className="catbar" key={c.category}>
+                      <div className="cb-top">
+                        <span className="cb-name">{c.category}</span>
+                        <span className="cb-val"><b>{c.n}</b> ({c.pct}%)</span>
+                      </div>
+                      <div className="catbar-track"><div className="catbar-fill" style={{ width: `${(c.n / maxCat) * 100}%` }} /></div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="pv-meta" style={{ marginTop: 14 }}>Total: {d.total} tickets · "Anteriores" = categorías renombradas o eliminadas en Configuración que aún tienen tickets viejos.</p>
             </div>
 
             <div className="panel">
@@ -3437,6 +3502,8 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 .donut-legend .lg b { font-variant-numeric: tabular-nums; }
 
 /* ---------- Category horizontal bars ---------- */
+.cat-group-title { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 16px 0 10px; }
+.cat-group-title:first-child { margin-top: 0; }
 .catbars { display: flex; flex-direction: column; gap: 11px; }
 .catbar { display: grid; grid-template-columns: 1fr; gap: 5px; }
 .catbar-link { color: inherit; text-decoration: none; cursor: pointer; border-radius: 6px; padding: 4px 6px; margin: -4px -6px; transition: background .15s ease; }

@@ -57,7 +57,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
   const maxCat = Math.max(1, ...d.byCategory.map((c) => c.n));
   const maxCompany = Math.max(1, ...d.byCompany.map((c: any) => c.n));
   const maxDay = Math.max(1, ...d.byDay);
-  const topCats = d.byCategory.slice(0, 9);
+  const currentCats = d.byCategory.filter((c) => c.isCurrent).slice(0, 5);
+  const oldCats = d.byCategory.filter((c) => !c.isCurrent).slice(0, 5);
 
   return (
     <>
@@ -138,19 +139,40 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
           {/* Columna 2 */}
           <div className="col">
             <div className="panel">
-              <div className="panel-title">Tickets por categoría <span className="small">(Top {topCats.length})</span></div>
-              <div className="catbars">
-                {topCats.map((c) => (
-                  <div className="catbar" key={c.category}>
-                    <div className="cb-top">
-                      <span className="cb-name">{c.category}</span>
-                      <span className="cb-val"><b>{c.n}</b> ({c.pct}%)</span>
+              <div className="panel-title">Tickets por categoría</div>
+              <div className="cat-group-title">Categorías actuales (Top {currentCats.length})</div>
+              {currentCats.length === 0 ? (
+                <p className="pv-meta">Sin tickets en categorías actuales todavía.</p>
+              ) : (
+                <div className="catbars">
+                  {currentCats.map((c) => (
+                    <div className="catbar" key={c.category}>
+                      <div className="cb-top">
+                        <span className="cb-name">{c.category}</span>
+                        <span className="cb-val"><b>{c.n}</b> ({c.pct}%)</span>
+                      </div>
+                      <div className="catbar-track"><div className="catbar-fill" style={{ width: `${(c.n / maxCat) * 100}%` }} /></div>
                     </div>
-                    <div className="catbar-track"><div className="catbar-fill" style={{ width: `${(c.n / maxCat) * 100}%` }} /></div>
-                  </div>
-                ))}
-              </div>
-              <p className="pv-meta" style={{ marginTop: 14 }}>Total: {d.total} tickets</p>
+                  ))}
+                </div>
+              )}
+              <div className="cat-group-title">Categorías anteriores (Top {oldCats.length})</div>
+              {oldCats.length === 0 ? (
+                <p className="pv-meta">No hay tickets en categorías que ya no existen en la configuración.</p>
+              ) : (
+                <div className="catbars">
+                  {oldCats.map((c) => (
+                    <div className="catbar" key={c.category}>
+                      <div className="cb-top">
+                        <span className="cb-name">{c.category}</span>
+                        <span className="cb-val"><b>{c.n}</b> ({c.pct}%)</span>
+                      </div>
+                      <div className="catbar-track"><div className="catbar-fill" style={{ width: `${(c.n / maxCat) * 100}%` }} /></div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="pv-meta" style={{ marginTop: 14 }}>Total: {d.total} tickets · "Anteriores" = categorías renombradas o eliminadas en Configuración que aún tienen tickets viejos.</p>
             </div>
 
             <div className="panel">

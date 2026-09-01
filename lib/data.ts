@@ -94,7 +94,7 @@ export type SupportDashboard = {
   breached: number;
   minDate: string | null;
   maxDate: string | null;
-  byCategory: { category: string; n: number; pct: number }[];
+  byCategory: { category: string; n: number; pct: number; isCurrent: boolean }[];
   byCompany: any[];
   timeByCompany: { name: string; color: string; n: number; total_minutes: number; avg_minutes: number }[];
   byDay: number[]; // Lun..Dom
@@ -122,10 +122,12 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
       AND (${t2}::timestamptz IS NULL OR t.created_at < (${t2}::timestamptz + interval '1 day'))`;
 
   const cat = await q`
-    SELECT COALESCE(NULLIF(category, ''), 'Otros') AS category, COUNT(*)::int AS n
-    FROM tickets
-    WHERE (${f}::timestamptz IS NULL OR created_at >= ${f}::timestamptz)
-      AND (${t2}::timestamptz IS NULL OR created_at < (${t2}::timestamptz + interval '1 day'))
+    SELECT COALESCE(NULLIF(t.category, ''), 'Otros') AS category, COUNT(*)::int AS n,
+      BOOL_OR(c2.id IS NOT NULL) AS is_current
+    FROM tickets t
+    LEFT JOIN categories c2 ON c2.name = t.category
+    WHERE (${f}::timestamptz IS NULL OR t.created_at >= ${f}::timestamptz)
+      AND (${t2}::timestamptz IS NULL OR t.created_at < (${t2}::timestamptz + interval '1 day'))
     GROUP BY 1 ORDER BY n DESC, category`;
 
   const byCompany = await q`
@@ -171,6 +173,7 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
     category: r.category,
     n: r.n,
     pct: total ? Math.round((r.n / total) * 100) : 0,
+    isCurrent: !!r.is_current,
   }));
 
   const byDay = [0, 0, 0, 0, 0, 0, 0]; // ISODOW 1=Lun .. 7=Dom
