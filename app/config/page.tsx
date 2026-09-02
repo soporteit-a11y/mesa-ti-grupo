@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { hasDb } from "@/lib/db";
-import { getCompanies, getCategories, getCollaborators, getCanned } from "@/lib/data";
+import { getCompanies, getCategories, getCollaborators, getCanned, getUsers } from "@/lib/data";
+import { getCurrentUser } from "@/lib/auth";
 import { Setup } from "@/components/Setup";
 import { SlaInput } from "@/components/SlaInput";
 import {
@@ -7,6 +9,7 @@ import {
   createCategory, updateCategory, deleteCategory,
   createCollaborator, updateCollaborator, deleteCollaborator,
   createCanned, deleteCanned,
+  createUser, updateUser, deleteUser,
 } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -14,10 +17,16 @@ export const dynamic = "force-dynamic";
 export default async function ConfigPage() {
   if (!hasDb) return <Setup />;
 
-  let companies: any[], categories: any[], collaborators: any[], canned: any[];
+  // Defensa en profundidad: el middleware ya bloquea esta ruta para agentes,
+  // pero si algun dia cambia su matcher la pagina no debe quedar expuesta.
+  const me = await getCurrentUser();
+  if (!me) redirect("/login");
+  if (me.role !== "admin") redirect("/mis-tickets");
+
+  let companies: any[], categories: any[], collaborators: any[], canned: any[], users: any[];
   try {
-    [companies, categories, collaborators, canned] = await Promise.all([
-      getCompanies(), getCategories(), getCollaborators(), getCanned(),
+    [companies, categories, collaborators, canned, users] = await Promise.all([
+      getCompanies(), getCategories(), getCollaborators(), getCanned(), getUsers(),
     ]);
   } catch (e) {
     return <Setup />;
@@ -28,7 +37,7 @@ export default async function ConfigPage() {
       <div className="topbar">
         <div>
           <h1>Configuración</h1>
-          <div className="sub">Personaliza empresas, categorías, SLA, colaboradores y respuestas rápidas</div>
+          <div className="sub">Personaliza empresas, categorías, SLA, usuarios, colaboradores y respuestas rápidas</div>
         </div>
       </div>
 
@@ -91,10 +100,81 @@ export default async function ConfigPage() {
 
         </div>
 
+        {/* ---------- Usuarios con acceso al sistema ---------- */}
+        <div className="section-title">
+          <h2>Usuarios del sistema</h2>
+          <span className="hint">quién puede entrar, con qué rol y qué empresas ve en Rutas de trabajo</span>
+        </div>
+        <div className="card cfg-card">
+          <div className="cfg-head">Cuentas <span className="cfg-count">{users.length}</span></div>
+          <div className="cfg-list">
+            {users.map((u) => (
+              <div className="cfg-row cfg-row-user" key={u.id}>
+                <form action={updateUser} className="cfg-edit cfg-edit-user">
+                  <input type="hidden" name="id" value={u.id} />
+                  <div className="cfg-user-line">
+                    <input type="text" name="name" defaultValue={u.name} placeholder="Nombre" className="cfg-name-input" />
+                    <input type="email" name="email" defaultValue={u.email} placeholder="Correo" className="cfg-contact-input" />
+                    <select name="role" defaultValue={u.role} className="cfg-role-select">
+                      <option value="admin">Super admin</option>
+                      <option value="agent">Colaborador</option>
+                    </select>
+                    <input type="password" name="password" placeholder="Nueva clave (opcional)" className="cfg-contact-input" autoComplete="new-password" />
+                    <button type="submit" className="btn sm" title="Guardar">✓</button>
+                  </div>
+                  <div className="cfg-user-companies">
+                    <span className="cfg-user-clabel">Empresas visibles</span>
+                    {companies.map((co) => (
+                      <label className="cfg-chk" key={co.id}>
+                        <input
+                          type="checkbox"
+                          name="company_ids"
+                          value={co.id}
+                          defaultChecked={u.company_ids.includes(co.id)}
+                        />
+                        {co.name}
+                      </label>
+                    ))}
+                    {u.role === "admin" ? <span className="pv-meta">— un super admin ve todas de todos modos</span> : null}
+                  </div>
+                </form>
+                <form action={deleteUser}>
+                  <input type="hidden" name="id" value={u.id} />
+                  <button type="submit" className="btn sm danger" title="Eliminar cuenta">✕</button>
+                </form>
+              </div>
+            ))}
+          </div>
+          <form action={createUser} className="cfg-add cfg-add-user">
+            <input type="text" name="name" placeholder="Nombre" required />
+            <input type="email" name="email" placeholder="Correo" required />
+            <select name="role" defaultValue="agent" className="cfg-role-select">
+              <option value="agent">Colaborador</option>
+              <option value="admin">Super admin</option>
+            </select>
+            <input type="password" name="password" placeholder="Contraseña" required autoComplete="new-password" />
+            <div className="cfg-user-companies">
+              <span className="cfg-user-clabel">Empresas visibles</span>
+              {companies.map((co) => (
+                <label className="cfg-chk" key={co.id}>
+                  <input type="checkbox" name="company_ids" value={co.id} />
+                  {co.name}
+                </label>
+              ))}
+            </div>
+            <button type="submit" className="btn primary sm">Crear cuenta</button>
+          </form>
+          <p className="pv-meta" style={{ marginTop: 2 }}>
+            Un <b>colaborador</b> solo puede reportar tickets, ver los suyos, y ver y marcar tareas de las
+            rutas de las empresas que le marques aquí. Deja la clave vacía al editar para no cambiarla.
+            No puedes eliminar tu propia cuenta ni dejar el sistema sin ningún super admin.
+          </p>
+        </div>
+
         {/* ---------- Colaboradores / usuarios del sistema ---------- */}
         <div className="section-title">
           <h2>Colaboradores</h2>
-          <span className="hint">usuarios del sistema — nombre, empresa, correo y celular</span>
+          <span className="hint">directorio de contactos para asignar como solicitante de un ticket — no dan acceso al sistema</span>
         </div>
         <div className="card cfg-card">
           <div className="cfg-head">Perfiles <span className="cfg-count">{collaborators.length}</span></div>

@@ -6,7 +6,13 @@ import { TaskItem } from "@/components/TaskItem";
 
 type Task = { id: number; done: boolean; title: string };
 
-export function TaskList({ initiativeId, tasks }: { initiativeId: number; tasks: Task[] }) {
+export function TaskList({
+  initiativeId, tasks, locked = false,
+}: {
+  initiativeId: number; tasks: Task[];
+  /** Rol colaborador: solo marcar/desmarcar. Sin reordenar, renombrar ni borrar. */
+  locked?: boolean;
+}) {
   const [items, setItems] = useState<Task[]>(tasks);
   const dragIndex = useRef<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -44,6 +50,18 @@ export function TaskList({ initiativeId, tasks }: { initiativeId: number; tasks:
     setItems(next);
     persist(next);
   };
+
+  if (locked) {
+    return (
+      <div className="checklist">
+        {items.map((t) => (
+          <div className="task-drag-row" key={t.id}>
+            <TaskItem id={t.id} done={t.done} title={t.title} locked />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="checklist">

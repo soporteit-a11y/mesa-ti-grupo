@@ -1,16 +1,10 @@
-import { neon } from "@neondatabase/serverless";
 import { hashPassword } from "./password";
+import { sql, hasDb } from "./sql";
 
-const connectionString =
-  process.env.POSTGRES_URL ||
-  process.env.DATABASE_URL ||
-  process.env.POSTGRES_PRISMA_URL ||
-  process.env.POSTGRES_URL_NON_POOLING ||
-  process.env.DATABASE_URL_UNPOOLED ||
-  "";
-
-export const hasDb = Boolean(connectionString);
-export const sql = connectionString ? neon(connectionString) : null;
+// La conexion vive en lib/sql.ts para que el middleware (Edge Runtime) pueda
+// usarla sin arrastrar este archivo, que importa `crypto` de Node. Se
+// re-exporta aqui para no tocar los ~15 archivos que ya importan de "@/lib/db".
+export { sql, hasDb };
 
 let schemaPromise: Promise<void> | null = null;
 
@@ -77,6 +71,13 @@ async function init(q: NonNullable<typeof sql>) {
   await q`CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY, user_id INT REFERENCES users(id) ON DELETE CASCADE,
     expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ DEFAULT now()
+  )`;
+  // Empresas visibles para cada usuario. Solo aplica al rol 'agent': el admin
+  // siempre ve las cuatro. Sin filas para un agente = no ve ninguna ruta.
+  await q`CREATE TABLE IF NOT EXISTS user_companies (
+    user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    company_id INT REFERENCES companies(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, company_id)
   )`;
 
   // Migracion para BD existente (tickets antiguos con columnas NOT NULL)

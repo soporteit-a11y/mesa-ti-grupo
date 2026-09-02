@@ -7,11 +7,11 @@
 > con el código fuente íntegro, está en **`HANDOFF.md`**, en esta misma carpeta.
 >
 > **Última sesión:** 2 de septiembre de 2026
-> **Estado del sistema:** en producción, funcionando, sin incidencias abiertas. Está en curso un
-> sistema de login con roles (ver HANDOFF.md §5.11) — esta primera entrega solo monta el esquema
-> y la pantalla de `/login`, **todavía no bloquea ninguna ruta** (falta el middleware, que es la
-> siguiente entrega). Necesita que agregues `ADMIN_NAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` en las
-> variables de entorno de Vercel para que se cree tu cuenta de admin — ver P0.bis abajo.
+> **Estado del sistema:** en producción, funcionando, sin incidencias abiertas.
+> **El sistema ya NO es de acceso abierto:** tiene login con roles `admin` / `agent`, bloqueo de
+> rutas por middleware y gestión de cuentas desde `/config`. Antes de tocar cualquier cosa
+> relacionada con permisos, sesiones o el middleware, lee **HANDOFF.md §5.11** — en particular la
+> tabla de qué archivo puede correr en Edge Runtime y cuál no.
 >
 > ### 👉 ¿Buscas qué hay que hacer? Está todo en **§3.bis · TODO LO PENDIENTE**
 > Doce puntos numerados de P0 a P11, ordenados por prioridad. Nada de eso bloquea el
@@ -131,11 +131,23 @@ Cómo terminar de verificarlo está en el pendiente **P1** de la sección siguie
 
 ### 🔴 Antes de cambiar de cuenta — hazlo primero
 
-**P0.bis · Variables de entorno del login (`ADMIN_NAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD`).**
-Sin estas tres en Vercel (Project Settings → Environment Variables), la tabla `users` se queda
-vacía y `/login` no deja entrar a nadie — ver HANDOFF.md §5.11. Solo se leen una vez (mientras
-`users` esté vacía), así que se pueden borrar de Vercel después del primer login exitoso si se
-prefiere no dejar la contraseña ahí en texto plano indefinidamente.
+**P0.bis · Borrar `ADMIN_PASSWORD` de las variables de entorno de Vercel.**
+Ya se usó: la cuenta admin existe y el login funciona. Esas variables
+(`ADMIN_NAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD`) solo se leen cuando la tabla `users` está vacía, así
+que ya no hacen nada — pero dejan la contraseña inicial en texto plano en el panel de Vercel.
+Conviene borrar al menos `ADMIN_PASSWORD`. Si algún día hiciera falta recrear la primera cuenta
+desde cero (tabla `users` vacía), se vuelven a poner.
+
+**P0.ter · Cambiar la contraseña inicial.**
+La contraseña con la que se creó la cuenta admin llegó a compartirse por chat durante la sesión
+del 2-sep, así que debe considerarse comprometida. Se cambia desde `/config` → Usuarios del
+sistema → escribir la clave nueva en la fila de tu cuenta → ✓. Al cambiarla se cierran
+automáticamente todas las sesiones abiertas de ese usuario.
+
+**Nota sobre el cambio de despliegue.** Un cambio en las variables de entorno de Vercel **no**
+afecta a un despliegue que ya está corriendo: hay que hacer *Redeploy* del despliegue **más
+reciente** (Vercel no deja redesplegar uno viejo — da el aviso "A more recent Production
+Deployment has been created"). Esto costó un par de vueltas la primera vez.
 
 **P0 · Volcado de la base de datos.**
 Es lo único verdaderamente irrecuperable. El repositorio **no** contiene los datos reales (§6):

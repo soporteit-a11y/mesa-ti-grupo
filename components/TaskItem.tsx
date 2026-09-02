@@ -3,7 +3,16 @@
 import { useRef, useState } from "react";
 import { toggleTask, updateTaskTitle, deleteTask } from "@/app/actions";
 
-export function TaskItem({ id, done, title }: { id: number; done: boolean; title: string }) {
+export function TaskItem({
+  id, done, title, locked = false,
+}: {
+  id: number; done: boolean; title: string;
+  /**
+   * Rol colaborador: puede marcar la tarea como hecha, pero no renombrarla ni
+   * eliminarla. Por defecto false, asi la vista del admin no cambia.
+   */
+  locked?: boolean;
+}) {
   const toggleRef = useRef<HTMLFormElement>(null);
   const titleRef = useRef<HTMLFormElement>(null);
   const deleteRef = useRef<HTMLFormElement>(null);
@@ -19,6 +28,9 @@ export function TaskItem({ id, done, title }: { id: number; done: boolean; title
         </label>
       </form>
 
+      {locked ? (
+        <span className="task-title-static">{title}</span>
+      ) : (
       <form ref={titleRef} action={updateTaskTitle} className="task-title-form">
         <input type="hidden" name="id" value={id} />
         <input
@@ -37,18 +49,21 @@ export function TaskItem({ id, done, title }: { id: number; done: boolean; title
           className="task-title-input"
         />
       </form>
+      )}
 
-      <form ref={deleteRef} action={deleteTask}>
-        <input type="hidden" name="id" value={id} />
-        <button
-          type="submit"
-          className="task-del"
-          title="Eliminar tarea"
-          onClick={(e) => { if (!confirm("¿Eliminar esta tarea?")) e.preventDefault(); }}
-        >
-          ✕
-        </button>
-      </form>
+      {!locked && (
+        <form ref={deleteRef} action={deleteTask}>
+          <input type="hidden" name="id" value={id} />
+          <button
+            type="submit"
+            className="task-del"
+            title="Eliminar tarea"
+            onClick={(e) => { if (!confirm("¿Eliminar esta tarea?")) e.preventDefault(); }}
+          >
+            ✕
+          </button>
+        </form>
+      )}
     </div>
   );
 }

@@ -1,4 +1,6 @@
-import { sql } from "./db";
+// Importa de lib/sql.ts, NO de lib/db.ts: este archivo lo usa el middleware, que
+// corre en Edge Runtime, y db.ts arrastra `crypto` de Node (ver lib/sql.ts).
+import { sql } from "./sql";
 
 export type SessionUser = { id: number; name: string; email: string; role: string };
 

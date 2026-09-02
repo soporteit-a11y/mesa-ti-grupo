@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { hasDb } from "@/lib/db";
 import { getSupportDashboard } from "@/lib/data";
+import { getCurrentUser } from "@/lib/auth";
 import { Setup } from "@/components/Setup";
 import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { drDayMonth, drYear, fmtDateTimeDR, fmtDuration } from "@/lib/dates";
@@ -37,6 +39,12 @@ function Donut({ pct, label }: { pct: number; label: string }) {
 
 export default async function DashboardPage({ searchParams }: { searchParams: Record<string, string> }) {
   if (!hasDb) return <Setup />;
+
+  // Defensa en profundidad: el middleware ya redirige a los colaboradores, pero
+  // la pagina no debe depender solo de eso.
+  const me = await getCurrentUser();
+  if (!me) redirect("/login");
+  if (me.role !== "admin") redirect("/mis-tickets");
 
   const from = searchParams?.from || null;
   const to = searchParams?.to || null;

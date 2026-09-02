@@ -15,6 +15,42 @@ export async function getCategories() {
   return sql!`SELECT id, name, sla_hours FROM categories ORDER BY name`;
 }
 
+/**
+ * Usuarios del sistema con las empresas que tiene asignadas cada uno.
+ * `company_ids` viene como arreglo para poder marcar las casillas en /config
+ * sin hacer una consulta por usuario.
+ */
+export async function getUsers() {
+  await ensureSchema();
+  const rows = await sql!`
+    SELECT u.id, u.name, u.email, u.role, u.created_at,
+      COALESCE(ARRAY_AGG(uc.company_id) FILTER (WHERE uc.company_id IS NOT NULL), '{}') AS company_ids
+    FROM users u LEFT JOIN user_companies uc ON uc.user_id = u.id
+    GROUP BY u.id ORDER BY u.role, u.name`;
+  // company_ids puede llegar como arreglo real o como texto '{1,2}' segun como
+  // el driver interprete el tipo; se normaliza aqui para que la pagina no tenga
+  // que preocuparse por eso.
+  return (rows as any[]).map((r) => ({
+    ...r,
+    company_ids: Array.isArray(r.company_ids)
+      ? r.company_ids.map(Number)
+      : String(r.company_ids || "").replace(/[{}]/g, "").split(",").filter(Boolean).map(Number),
+  }));
+}
+
+/**
+ * IDs de empresa que un usuario puede ver. El admin ve todas (devuelve null,
+ * que los llamadores interpretan como "sin filtro"); el agente ve solo las
+ * asignadas en /config.
+ */
+export async function getVisibleCompanyIds(user: { id: number; role: string } | null): Promise<number[] | null> {
+  if (!user) return [];
+  if (user.role === "admin") return null;
+  await ensureSchema();
+  const rows = await sql!`SELECT company_id FROM user_companies WHERE user_id = ${user.id}`;
+  return (rows as any[]).map((r) => r.company_id);
+}
+
 export async function getCanned() {
   await ensureSchema();
   return sql!`SELECT id, title, text FROM canned_responses ORDER BY title`;
@@ -57,13 +93,14 @@ export type TicketRow = {
   created_at: string;
   resolved_at: string | null;
   cat_sla: number | null;
+  created_by: number | null;
 };
 
 export async function getTickets(): Promise<TicketRow[]> {
   await ensureSchema();
   const rows = await sql!`
     SELECT t.id, t.title, t.category, t.priority, t.status, t.requester, t.created_at, t.resolved_at,
-           c.name AS company, c.color AS company_color, cat.sla_hours AS cat_sla
+           t.created_by, c.name AS company, c.color AS company_color, cat.sla_hours AS cat_sla
     FROM tickets t
     LEFT JOIN companies c ON c.id = t.company_id
     LEFT JOIN categories cat ON cat.name = t.category
@@ -71,7 +108,21 @@ export async function getTickets(): Promise<TicketRow[]> {
   return rows as TicketRow[];
 }
 
-export async function getTicketDetail(id: number) {
+/** Tickets creados por un usuario concreto (pantalla del rol colaborador). */
+export async function getTicketsByUser(userId: number): Promise<TicketRow[]> {
+  await ensureSchema();
+  const rows = await sql!`
+    SELECT t.id, t.title, t.category, t.priority, t.status, t.requester, t.created_at, t.resolved_at,
+           t.created_by, c.name AS company, c.color AS company_color, cat.sla_hours AS cat_sla
+    FROM tickets t
+    LEFT JOIN companies c ON c.id = t.company_id
+    LEFT JOIN categories cat ON cat.name = t.category
+    WHERE t.created_by = ${userId}
+    ORDER BY t.created_at DESC, t.id DESC`;
+  return rows as TicketRow[];
+}
+
+export async function getTicketDetail(id: number): Promise<any> {
   await ensureSchema();
   const q = sql!;
   const rows = await q`
@@ -202,6 +253,7 @@ export type Initiative = {
   status: string;
   owner: string | null;
   due_date: string | null;
+  company_id: number;
   company: string;
   company_color: string;
   tasks: { id: number; title: string; done: boolean }[];
@@ -214,7 +266,8 @@ export async function getInitiatives(): Promise<Initiative[]> {
   await ensureSchema();
   const q = sql!;
   const inits = await q`
-    SELECT i.id, i.title, i.area, i.status, i.owner, i.due_date, c.name AS company, c.color AS company_color
+    SELECT i.id, i.title, i.area, i.status, i.owner, i.due_date, i.company_id,
+           c.name AS company, c.color AS company_color
     FROM initiatives i JOIN companies c ON c.id = i.company_id
     ORDER BY c.name, i.id`;
   const tasks = await q`SELECT id, initiative_id, title, done FROM initiative_tasks ORDER BY position, id`;

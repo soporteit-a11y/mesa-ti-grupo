@@ -13,19 +13,15 @@
 > ya descubiertas.
 >
 > **Fecha del traspaso:** 24 de agosto de 2026
-> **Última actualización:** 2 de septiembre de 2026 — arrancó la implementación de **login con
-> roles** (tabla `users`/`sessions`, hashing de contraseñas, `/login`, acciones `login`/`logout`).
-> **Esta primera entrega todavía NO bloquea ninguna ruta** — no hay `middleware.ts` todavía, así
-> que el sistema sigue siendo tan abierto como antes salvo por el hecho de que ahora existe una
-> pantalla de login funcional. El bloqueo real por rol (middleware, vistas restringidas para el
-> rol "agente", CRUD de Usuarios en `/config`) es la siguiente entrega, a propósito separada para
-> no mezclar un cambio de seguridad con la puesta en marcha del esquema. Ver §5.11.
-> **Acción pendiente tuya:** agregar `ADMIN_NAME`, `ADMIN_EMAIL` y `ADMIN_PASSWORD` en las
-> variables de entorno de Vercel — sin esas tres, no se crea ninguna cuenta y `/login` no deja
-> entrar a nadie. Ver §5.11.
-> **Estado:** en producción y en uso real. El episodio de auto-deploy estancado del commit
-> `abfde59` (documentado antes aquí) se resolvió solo — el build siguiente lo alcanzó y quedó
-> confirmado en vivo; ver §10 igual por si vuelve a pasar.
+> **Última actualización:** 2 de septiembre de 2026 — **el sistema ya no es de acceso abierto.**
+> Tiene login con dos roles (`admin` y `agent`), sesiones en cookie, bloqueo de rutas por
+> middleware, gestión de cuentas en `/config` y asignación de empresas visibles por usuario. Ver
+> §5.11, que es la sección que hay que leer antes de tocar nada relacionado con permisos.
+> **Trampa importante para quien continúe:** la capa de datos está partida en tres archivos
+> (`lib/sql.ts`, `lib/session.ts`, `lib/db.ts`) por una restricción del Edge Runtime, no por
+> gusto. La tabla de §5.11 explica qué puede importar cada uno; romper esa regla hace que
+> `middleware.ts` deje de compilar.
+> **Estado:** en producción y en uso real.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
 > el código y no actualizas esto, el traspaso deja de servir.
@@ -338,7 +334,7 @@ ninguna categoría nueva) se muestra un mensaje en vez de una lista vacía. La t
 tickets por categoría" (columna 3) no cambió: sigue listando **todas** las categorías sin dividir,
 porque ahí el objetivo es el detalle completo, no un resumen.
 
-### 5.11 Autenticación — login con roles (en curso, empezado 2026-09-02)
+### 5.11 Autenticación — login con roles
 
 Hasta esta tanda, Mesa TI no tenía **ningún** tipo de login: cualquiera con la URL de producción
 podía ver y editar todo, incluyendo `/config`. Se está agregando un sistema de cuentas con dos
@@ -346,15 +342,13 @@ roles: **admin** (Eddy, ve y edita todo, igual que hoy) y **agent** (el resto de
 solo podrá crear tickets, ver los que él mismo creó, y ver/marcar tareas de la ruta de CMG — esa
 parte todavía no está implementada, ver más abajo).
 
-**Por qué se partió en dos entregas.** Agregar autenticación sobre una app en producción con
-datos reales es un cambio de superficie de seguridad: si el middleware que bloquea rutas tiene un
-error, puede dejar a Eddy fuera de su propio sistema sin manera de entrar. Por eso esta primera
-entrega **solo** monta el esquema, el hashing de contraseñas, las sesiones y la pantalla de
-login — deliberadamente **sin** `middleware.ts` todavía, para poder confirmar en producción que
-el login funciona antes de que nada empiece a bloquear rutas. La segunda entrega (pendiente)
-agrega el middleware, las vistas restringidas por rol, y la sección "Usuarios" en `/config` para
-crear cuentas de tipo `agent` (por ahora, sin esa sección, la única cuenta que existe es el admin
-sembrado por variables de entorno).
+**Por qué se entregó en dos pasos.** Agregar autenticación sobre una app en producción con datos
+reales es un cambio de superficie de seguridad: si el middleware que bloquea rutas tiene un error,
+puede dejar a Eddy fuera de su propio sistema sin manera de entrar. Por eso el primer despliegue
+montó **solo** el esquema, el hashing, las sesiones y la pantalla de login, deliberadamente sin
+`middleware.ts`, y no se avanzó hasta confirmar en producción que el login funcionaba de verdad.
+El segundo despliegue agregó el bloqueo por rol. Si en el futuro hay que tocar el middleware,
+conviene repetir esa disciplina.
 
 **Contraseñas, sin agregar dependencias.** `lib/password.ts` usa `crypto.scryptSync` (nativo de
 Node) para el hash, guardado como `salt:hashHex` en `users.password_hash`, y
@@ -362,14 +356,22 @@ Node) para el hash, guardado como `salt:hashHex` en `users.password_hash`, y
 ninguna librería — coherente con que este proyecto no tiene dependencias más allá de Next/React/
 el driver de Neon.
 
-**Por qué `lib/session.ts` está separado de `lib/auth.ts`.** El middleware de Next 14 corre en
-**Edge Runtime**, que no soporta el módulo `crypto` de Node (ni nada que lo importe, aunque sea
-indirectamente — el bundler de Edge falla al empaquetarlo). Por eso `lib/session.ts` no importa
-nada de Node: solo hace una consulta SQL vía el `sql` de `lib/db.ts` (que sí es edge-compatible,
-es HTTP puro) para resolver un token de sesión a `{id, name, email, role}`. Es lo único que el
-middleware (cuando se agregue) podrá importar. `lib/auth.ts`, en cambio, sí usa `crypto` y
-`next/headers` (cookies) — lo usan las Server Actions y los Server Components, que corren en
-Node, nunca el middleware.
+**La separación Edge / Node — la trampa más sutil de esta tanda.** El middleware de Next 14 corre
+en **Edge Runtime**, que no soporta el módulo `crypto` de Node *ni nada que lo importe, aunque sea
+indirectamente*: el bundler de Edge sigue el árbol de imports completo y falla. Esto obligó a
+partir la capa de datos en tres archivos:
+
+| Archivo | Runtime | Qué contiene | Quién lo importa |
+|---|---|---|---|
+| `lib/sql.ts` | Edge **y** Node | Solo la conexión: `sql`, `hasDb` | `lib/db.ts` y `lib/session.ts` |
+| `lib/session.ts` | Edge **y** Node | `getSession(token)` — una consulta, sin imports de Node | `middleware.ts`, `lib/auth.ts` |
+| `lib/db.ts` | Solo Node | `ensureSchema()`, migraciones, semillas (importa `lib/password.ts` → `crypto`) | Todo lo demás |
+
+`lib/db.ts` re-exporta `sql` y `hasDb` desde `lib/sql.ts` para no tener que tocar los ~15 archivos
+que ya importaban de `@/lib/db`. **Si alguna vez `middleware.ts` empieza a fallar al compilar con
+un error sobre módulos de Node, casi seguro es porque algo en esa cadena
+(`middleware → session → sql`) empezó a importar `db.ts` o algún archivo con `crypto`/`fs`.**
+`lib/auth.ts` (hashing, cookies vía `next/headers`) es Node puro y nunca debe entrar ahí.
 
 **Sesiones.** Tabla `sessions` (`token` como PK, texto aleatorio de 32 bytes vía
 `crypto.randomBytes`, `user_id`, `expires_at`) en una cookie `httpOnly`/`sameSite=lax`, 30 días.
@@ -394,13 +396,57 @@ excepción a propósito: si el correo o la contraseña no coinciden, la acción 
 `redirect('/login?error=1')` y la página de login muestra "Correo o contraseña incorrectos." — sin
 esto, alguien que escribe mal su contraseña no tendría ninguna pista de qué pasó.
 
-**Lo que falta (próxima entrega, no incluido todavía):** `middleware.ts` para bloquear rutas por
-rol, la sección "Usuarios" en `/config` (crear/editar/borrar cuentas `agent`), la página
-`/mis-tickets` para el rol agente, restricciones de rol dentro de `app/actions.ts` (por ahora
-ninguna acción existente comprueba el rol — `login`/`logout` son las únicas dos acciones nuevas),
-y las vistas de solo-lectura/CMG-únicamente en `/rutas`. Hasta que eso se agregue, la app sigue
-siendo tan abierta como siempre para cualquiera que no pase por `/login` — el login existe, pero
-todavía no es obligatorio para nada.
+**Bloqueo real de rutas (`middleware.ts`, agregado 2026-09-02).** Lee la cookie de sesión, la
+resuelve con `getSession()` y aplica tres reglas: sin sesión y fuera de `/login` → a `/login`;
+con sesión en `/login` → a su pantalla de inicio según rol; colaborador pidiendo `/`, `/tickets`
+o `/config` → a `/mis-tickets`. El `matcher` excluye `_next/` y cualquier ruta con extensión
+(imágenes, favicon): sin eso, **cada archivo estático gastaría una consulta a la base** para
+resolver la sesión. Además, `/`, `/tickets` y `/config` repiten la comprobación dentro de la
+propia página (defensa en profundidad): si algún día alguien toca el `matcher` y deja un hueco,
+la página no queda expuesta.
+
+**Empresas visibles por usuario, no "CMG" a fuego.** El pedido original decía "que vean la ruta
+de CMG", pero dejar el nombre de una empresa escrito en el código habría violado la regla de que
+nada que el usuario pueda querer cambiar viva fuera de la base (§13). En su lugar existe la tabla
+`user_companies` (`user_id`, `company_id`, PK compuesta) y en `/config` cada cuenta tiene casillas
+para marcar qué empresas ve. `getVisibleCompanyIds(user)` devuelve `null` para el admin —que los
+llamadores interpretan como "sin filtro"— y el arreglo de IDs para un colaborador. Un colaborador
+sin ninguna empresa marcada no ve ninguna ruta, y `/rutas` se lo dice explícitamente en vez de
+mostrarle una pantalla vacía sin explicación.
+
+**Qué puede hacer cada rol.** El admin, todo, exactamente igual que antes de que existiera el
+login. El colaborador: crear tickets, ver **solo los que él creó** (`tickets.created_by`, que
+`createTicket` toma de la sesión y nunca de un campo del formulario), comentar en esos tickets, y
+ver y marcar tareas de las rutas de sus empresas. No puede editar tickets, cambiar estados, tocar
+tiempos de resolución, ni crear/renombrar/borrar rutas o tareas.
+
+**La autorización vive en las acciones, no en la interfaz.** Ocultar un botón no protege nada:
+cualquiera puede invocar una Server Action directamente. Por eso ~22 de las acciones existentes
+llevan `if (!(await requireAdmin())) return;` como paso 2, justo después de `ensureSchema()`.
+Tres casos no siguen ese patrón simple:
+- `createTicket` — cualquier sesión válida puede crear, pero graba `created_by` del servidor.
+- `toggleTask` — única acción de rutas que un colaborador puede ejecutar. La comprobación de
+  empresa va **dentro del propio `UPDATE`** (un `FROM initiatives` + `EXISTS` sobre
+  `user_companies`), no como consulta previa: así no existe ventana entre verificar y escribir.
+- `addComment` — un colaborador solo puede comentar en tickets con `created_by = su id`. Sin
+  esto podría comentar en cualquier ticket adivinando el `?ticket=` de la URL.
+
+**El menú lateral y `/login` ya no conviven.** `app/layout.tsx` resuelve la sesión y, si no hay,
+devuelve solo `<body>{children}</body>` sin el armazón de la app. Antes de esto la pantalla de
+login se veía con el menú lateral completo de alguien que todavía no había entrado.
+
+**Perfil y cerrar sesión: arriba a la derecha.** `components/UserMenu.tsx` (cliente) muestra un
+avatar con iniciales; al abrirlo se ven nombre, correo, rol y empresas asignadas, más el botón de
+cerrar sesión. Se colocó ahí y no en `.side-foot` —que era la idea inicial— porque ese pie está
+en `display:none` en el breakpoint móvil, y un colaborador en el teléfono se habría quedado sin
+manera de salir. La barra `.userbar` **no es `position: sticky`** a propósito: la `.topbar` de
+cada página ya se queda fija arriba y dos elementos pegados a `top: 0` se solaparían.
+
+**Cambiar la contraseña cierra las sesiones abiertas.** `updateUser`, si recibe una clave nueva,
+borra las filas de `sessions` de ese usuario. Dejar la clave vacía al editar no la cambia.
+
+**Dos protecciones para no quedarte fuera de tu propio sistema:** no puedes eliminar tu propia
+cuenta, y no puedes eliminar (ni degradar a colaborador) al último admin que quede.
 
 ---
 
@@ -940,6 +986,38 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
+### 2 de septiembre de 2026 (tanda 2 de 2) — Roles reales: middleware, usuarios y menú de perfil
+
+Con el login ya confirmado funcionando en producción, esta tanda cierra el sistema de roles. El
+usuario refinó el pedido original en dos puntos importantes: (a) quería el perfil y el cerrar
+sesión **arriba a la derecha**, no en el menú lateral, y (b) en vez de dar acceso fijo a "la ruta
+de CMG", quería poder **elegir por usuario** qué empresas ve — lo cual es más correcto y respeta
+la regla de no dejar nada configurable escrito en el código.
+
+- `lib/sql.ts` (nuevo): la conexión sale de `db.ts` a su propio archivo. **Sin esto el middleware
+  no compila:** `db.ts` importa `lib/password.ts` → `crypto` de Node, y el bundler de Edge sigue
+  el árbol de imports completo. `db.ts` re-exporta `sql`/`hasDb` para no tocar los ~15 archivos
+  que ya importaban de ahí. Ver la tabla de runtimes en §5.11.
+- `lib/db.ts`: nueva tabla `user_companies` (`user_id`, `company_id`, PK compuesta).
+- `middleware.ts` (nuevo): bloqueo por rol, con `matcher` que excluye `_next/` y rutas con
+  extensión para no gastar una consulta a la base por cada imagen.
+- `app/actions.ts`: `createUser`/`updateUser`/`deleteUser` (con guardas de "no borrarte a ti
+  mismo" y "no dejar el sistema sin admin"); `requireAdmin()` insertado en ~22 acciones
+  existentes; `createTicket` graba `created_by` desde la sesión; `toggleTask` comprueba la empresa
+  dentro del propio `UPDATE`; `addComment` exige propiedad del ticket para colaboradores.
+- `app/config/page.tsx`: sección "Usuarios del sistema" con casillas de empresas visibles. La
+  sección "Colaboradores" cambia su descripción — ahora que existen usuarios reales, decía
+  "usuarios del sistema" y se prestaba a confusión: es un directorio de contactos, no da acceso.
+- `app/layout.tsx`: sin sesión no se pinta el armazón (arregla que `/login` mostraba el menú
+  lateral); menú según rol; `UserMenu` en una nueva `.userbar`.
+- `components/UserMenu.tsx` (nuevo), `app/mis-tickets/page.tsx` (nuevo).
+- `components/TicketDetailDialog.tsx` gana `readOnly`; `TaskList`/`TaskItem` ganan `locked`.
+  Ambos por defecto en `false`, así la vista del admin no cambia en absoluto.
+- `app/rutas/page.tsx`: filtra por empresas asignadas y esconde los controles de edición para
+  colaboradores. Se agregó `fmtDateOnly()` local en vez de reusar `fmtDateDR` de `lib/dates.ts`:
+  `due_date` es un `DATE` sin hora, y convertirlo a la zona de RD lo corría un día hacia atrás.
+- `app/page.tsx` y `app/tickets/page.tsx`: comprobación de rol repetida en la página.
+
 ### 2 de septiembre de 2026 (tanda 1 de 2) — Base del login (esquema + sesiones, sin bloquear rutas todavía)
 
 El usuario pidió login con roles (admin ve todo; el resto del personal solo crea tickets, ve los
@@ -1381,6 +1459,15 @@ Historial reconstruido a partir del estado del código; las fechas exactas no qu
 Todo lo que sigue es el contenido íntegro y literal de los archivos del proyecto, tal como están
 en producción a la fecha de la última actualización. Con esto y las secciones anteriores, el
 proyecto se reconstruye desde cero sin necesitar nada más.
+
+> ⚠️ **Excepción conocida (2026-09-02).** La tanda de roles tocó ~14 archivos a la vez y este
+> apéndice **no** se regeneró completo para ella. Los archivos relacionados con permisos —
+> `lib/sql.ts`, `lib/session.ts`, `lib/auth.ts`, `middleware.ts`, `components/UserMenu.tsx`,
+> `app/mis-tickets/page.tsx`, `app/layout.tsx`, `app/config/page.tsx`, `app/actions.ts`,
+> `app/rutas/page.tsx`, `components/TaskItem.tsx`, `components/TaskList.tsx`,
+> `components/TicketDetailDialog.tsx` — están descritos con precisión en §5.11 y §14, pero su
+> volcado literal aquí puede estar por detrás del repositorio. **Para esos archivos, la fuente de
+> verdad es el repositorio, no esta sección.** Si vas a regenerar este apéndice, empieza por ellos.
 
 ---
 

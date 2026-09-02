@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { updateTicket, addComment } from "@/app/actions";
 import { StatusControl } from "@/components/StatusControl";
-import { slaInfo, fmtSlaHours } from "@/lib/priority";
-import { fmtDateTimeDR as fmtDateTime, autoResolutionMinutes } from "@/lib/dates";
+import { slaInfo, fmtSlaHours, STATUS_LABEL } from "@/lib/priority";
+import { fmtDateTimeDR as fmtDateTime, autoResolutionMinutes, fmtDuration } from "@/lib/dates";
 import { TicketResolutionTime } from "@/components/TicketResolutionTime";
 
 function SlaBadge({ ticket }: { ticket: any }) {
@@ -20,9 +20,15 @@ function SlaBadge({ ticket }: { ticket: any }) {
 }
 
 export function TicketDetailDialog({
-  ticket, companies, categories, collaborators, canned,
+  ticket, companies, categories, collaborators, canned, readOnly = false,
 }: {
   ticket: any; companies: any[]; categories: any[]; collaborators: any[]; canned: any[];
+  /**
+   * Vista del rol colaborador: puede consultar su ticket y comentar, pero no
+   * editar campos, cambiar el estado ni tocar el tiempo de resolución. El valor
+   * por defecto deja la vista del admin exactamente como estaba.
+   */
+  readOnly?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const router = useRouter();
@@ -55,7 +61,9 @@ export function TicketDetailDialog({
           <h3>Ticket #{ticket.id}</h3>
           <div className="ticket-meta-row">
             <span className="pv-meta">Creado {fmtDateTime(ticket.created_at)}</span>
-            <StatusControl id={ticket.id} status={ticket.status} />
+            {readOnly
+              ? <span className={"status-pill " + ticket.status}>{STATUS_LABEL[ticket.status as keyof typeof STATUS_LABEL] || ticket.status}</span>
+              : <StatusControl id={ticket.id} status={ticket.status} />}
           </div>
           <div className="ticket-meta-row" style={{ marginTop: 6 }}>
             <SlaBadge ticket={ticket} />
@@ -65,6 +73,43 @@ export function TicketDetailDialog({
       </div>
 
       <div className="dialog-body">
+        {readOnly ? (
+          <div className="ro-grid">
+            <div className="ro-field">
+              <span className="ro-k">Asunto</span>
+              <span className="ro-v">{ticket.title}</span>
+            </div>
+            <div className="ro-field">
+              <span className="ro-k">Descripción</span>
+              <span className="ro-v">{ticket.description || "— sin descripción —"}</span>
+            </div>
+            <div className="ro-row">
+              <div className="ro-field">
+                <span className="ro-k">Empresa</span>
+                <span className="ro-v"><span className="chip" style={{ background: ticket.company_color }}>{ticket.company}</span></span>
+              </div>
+              <div className="ro-field">
+                <span className="ro-k">Categoría</span>
+                <span className="ro-v">{ticket.category || "Otros"}</span>
+              </div>
+            </div>
+            <div className="ro-row">
+              <div className="ro-field">
+                <span className="ro-k">Prioridad</span>
+                <span className="ro-v"><span className={"pri " + (ticket.priority || "Baja")}>{ticket.priority || "Baja"}</span></span>
+              </div>
+              <div className="ro-field">
+                <span className="ro-k">Tiempo de resolución</span>
+                <span className="ro-v mono">
+                  {(() => {
+                    const mins = ticket.resolution_minutes ?? autoResolutionMinutes(ticket.created_at, ticket.resolved_at);
+                    return mins == null ? "Se calcula al resolver" : fmtDuration(mins);
+                  })()}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
         <form
           action={async (fd) => {
             setSavingTicket(true);
@@ -123,12 +168,15 @@ export function TicketDetailDialog({
             {savingTicket ? "Guardando..." : "Guardar cambios"}
           </button>
         </form>
+        )}
 
-        <TicketResolutionTime
-          id={ticket.id}
-          resolutionMinutes={ticket.resolution_minutes ?? null}
-          autoMinutes={autoResolutionMinutes(ticket.created_at, ticket.resolved_at)}
-        />
+        {!readOnly && (
+          <TicketResolutionTime
+            id={ticket.id}
+            resolutionMinutes={ticket.resolution_minutes ?? null}
+            autoMinutes={autoResolutionMinutes(ticket.created_at, ticket.resolved_at)}
+          />
+        )}
 
         <div className="comments-block">
           <div className="cfg-head">Comentarios <span className="cfg-count">{ticket.comments.length}</span></div>
