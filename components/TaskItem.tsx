@@ -2,15 +2,21 @@
 
 import { useRef, useState } from "react";
 import { toggleTask, updateTaskTitle, deleteTask } from "@/app/actions";
+import { TaskOwner } from "@/components/TaskOwner";
 
 export function TaskItem({
-  id, done, title, locked = false, readOnly = false, context, fecha,
+  id, done, title, locked = false, readOnly = false, context, fecha, owner, responsables = [], canEditOwner = false,
 }: {
   id: number; done: boolean; title: string;
   /** Sub-grupo del Excel del que venia la tarea. Solo informativo. */
   context?: string | null;
   /** Fecha planificada, ya formateada. */
   fecha?: string | null;
+  /** Responsable de la tarea. */
+  owner?: string | null;
+  /** Valores de responsable ya usados, para el autocompletado. */
+  responsables?: string[];
+  canEditOwner?: boolean;
   /**
    * Rol colaborador: puede marcar la tarea como hecha, pero no renombrarla ni
    * eliminarla. Por defecto false, asi la vista del admin no cambia.
@@ -65,6 +71,8 @@ export function TaskItem({
         />
       </form>
       )}
+
+      <TaskOwner id={id} owner={owner ?? null} sugerencias={responsables} canEdit={canEditOwner} />
 
       {fecha ? <span className="task-fecha mono">{fecha}</span> : null}
 

@@ -73,6 +73,13 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
     groups[i.company].items.push(i);
   }
 
+  // Responsables ya usados en cualquier tarea, para autocompletar al asignar.
+  const responsables = Array.from(
+    new Set(
+      initiatives.flatMap((i: any) => i.tasks.map((t: any) => t.owner).filter(Boolean))
+    )
+  ).sort() as string[];
+
   const url = (vista: string | null) => {
     const p = new URLSearchParams();
     if (f.company) p.set("company", f.company);
@@ -107,7 +114,8 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
             <Link href={url("gantt")} className={"btn sm" + (gantt ? " active" : "")}>Gantt</Link>
             <Link href={url("linea")} className={"btn sm" + (linea ? " active" : "")}>Línea de tiempo</Link>
           </div>
-          {!compacta && <ExpandirTodo alcance="crono." etiqueta="cronogramas" />}
+          {/* El de etapas vive en el resumen de arriba (DesplegarEtapas); aqui
+              solo queda el de fases, que es de otro nivel. */}
           {!compacta && <ExpandirTodo alcance="fase." etiqueta="fases" />}
           <span className="fcount">{rows.length} cronograma(s)</span>
         </div>
@@ -135,7 +143,7 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                   que comparar dentro de la misma empresa. */}
               {g.items.length > 1 && (
                 <div style={{ marginBottom: 16 }}>
-                  <ProjectOverview initiatives={g.items} company={company} color={g.color} />
+                  <ProjectOverview initiatives={g.items} company={company} color={g.color} vista={vista} />
                 </div>
               )}
 
@@ -217,6 +225,7 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                               color={g.color}
                               canEdit={esAdmin}
                               canCheck={puedeMarcar}
+                              responsables={responsables}
                             />
                           ))}
 
@@ -232,6 +241,8 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                                 tasks={i.looseTasks}
                                 locked={!esAdmin}
                                 readOnly={!puedeMarcar}
+                                responsables={responsables}
+                                canEditOwner={esAdmin}
                               />
                             </div>
                           )}
@@ -244,17 +255,17 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                   );
 
                   return (
-                    <article className="card init-card" key={i.id}>
+                    // El id es el destino del scroll al pulsar una barra del Gantt.
+                    <article className="card init-card" id={`crono-${i.id}`} key={i.id}>
                       <Collapsible
                         // La clave incluye la vista: lo que pliegues en Lista no
-                        // debe plegarse tambien en Gantt, donde el grafico es
-                        // justamente lo que quieres ver.
+                        // debe plegarse tambien en Gantt.
                         storageKey={`crono.${vista}.${i.id}`}
-                        // En Gantt y Linea de tiempo el contenido es el grafico,
-                        // asi que se abren. En Lista, los cronogramas con fases
-                        // (los de SINCO, muy largos) arrancan plegados y los
-                        // planos y cortos, abiertos.
-                        defaultOpen={compacta || !conFases}
+                        // Todo arranca cerrado: con 9 etapas y 249 tareas, abrir
+                        // de entrada es justamente lo que hacia la pagina
+                        // ilegible. Se entra por el Gantt de arriba o pulsando
+                        // la etapa que interese.
+                        defaultOpen={false}
                         head={cabecera}
                         meta={barra}
                       >

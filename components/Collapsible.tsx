@@ -56,11 +56,19 @@ export function Collapsible({
   // "Expandir todo" / "Contraer todo" avisan por un evento de ventana.
   useEffect(() => {
     function onPlegar(e: Event) {
-      const abrir = (e as CustomEvent<{ abrir: boolean; alcance: string }>).detail;
-      if (!abrir) return;
-      if (abrir.alcance && !storageKey.startsWith(abrir.alcance)) return;
-      setAbierto(abrir.abrir);
-      guardar(storageKey, abrir.abrir);
+      const d = (e as CustomEvent<{ abrir: boolean; alcance: string }>).detail;
+      if (!d) return;
+      // Un alcance terminado en "." es un grupo ("crono.", "fase."); cualquier
+      // otro es una clave concreta y tiene que coincidir EXACTAMENTE. Con
+      // startsWith a secas, abrir "crono.lista.12" abriria tambien
+      // "crono.lista.123".
+      if (d.alcance) {
+        const esGrupo = d.alcance.endsWith(".");
+        const coincide = esGrupo ? storageKey.startsWith(d.alcance) : storageKey === d.alcance;
+        if (!coincide) return;
+      }
+      setAbierto(d.abrir);
+      guardar(storageKey, d.abrir);
     }
     window.addEventListener(EVENTO, onPlegar);
     return () => window.removeEventListener(EVENTO, onPlegar);

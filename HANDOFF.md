@@ -599,6 +599,20 @@ ninguna otra vista.
 La clave de `localStorage` del plegado **incluye la vista** (`crono.<vista>.<id>`): lo que plieges
 en Lista no debe plegarse también en Gantt, donde el gráfico es justamente lo que quieres ver.
 
+**El Gantt del resumen es el índice del proyecto, no un dibujo.** Cada barra y cada nombre son
+botones: al pulsarlos se despliega esa etapa y la página hace scroll hasta ella
+(`components/GanttInteractivo.tsx`). Se comunican con los bloques por el mismo evento de ventana
+que usan los botones de Expandir/Contraer. **Todas las etapas arrancan cerradas** — con 9 etapas y
+249 tareas, abrirlas de entrada era justo lo que hacía la página ilegible.
+
+Ojo con el `alcance` de ese evento: **un alcance terminado en punto es un grupo** (`"crono."`,
+`"fase."`) y coincide por prefijo; cualquier otro es una clave concreta y tiene que coincidir
+exacto. Sin esa distinción, abrir `crono.lista.12` abriría también `crono.lista.123`.
+
+La columna de nombres del Gantt tiene un interruptor **"Ampliar nombres"** (190 px → 340 px con
+texto en varias líneas), porque títulos como "ETAPA 4 - SINCO · A&F — BD Secundaria 1" no caben en
+el ancho normal y quedaban cortados sin forma de leerlos enteros.
+
 **El Gantt** (`components/GanttChart.tsx`) está hecho a mano con posicionamiento porcentual, sin
 librerías, igual que las donas y barras del dashboard. Dibuja una barra por fase, con relleno
 proporcional al avance, marca del día de hoy (calculado en zona de RD, §5.8) y borde rojo en las

@@ -9,13 +9,15 @@ import type { Phase } from "@/lib/data";
 export { fmtRangoFechas as fmtRango } from "@/lib/dates";
 
 export function PhaseBlock({
-  initiativeId, phase, color, canEdit, canCheck, numero,
+  initiativeId, phase, color, canEdit, canCheck, numero, responsables = [],
 }: {
   initiativeId: number;
   phase: Phase;
   color: string;
   /** Posicion de la fase dentro del cronograma, empezando en 1. */
   numero: number;
+  /** Responsables ya usados en el sistema, para autocompletar. */
+  responsables?: string[];
   /** Admin: puede renombrar la fase, cambiar fechas, agregar y borrar tareas. */
   canEdit: boolean;
   /** Puede marcar tareas como completadas. */
@@ -49,6 +51,8 @@ export function PhaseBlock({
           tasks={phase.tasks}
           locked={!canEdit}
           readOnly={!canCheck}
+          responsables={responsables}
+          canEditOwner={canEdit}
         />
       )}
       {canEdit && <AddTaskForm initiativeId={initiativeId} phaseId={phase.id} />}

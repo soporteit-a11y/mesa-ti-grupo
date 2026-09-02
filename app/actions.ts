@@ -589,6 +589,18 @@ export async function deletePhase(formData: FormData) {
   revalidatePath("/");
 }
 
+/** Responsable de una tarea. Texto libre: los del Excel son "SINCOSOFT",
+ *  "MESSINA", "SINCOSOFT - MESSINA", que no son colaboradores del sistema. */
+export async function updateTaskOwner(formData: FormData) {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+  const id = Number(formData.get("id"));
+  const owner = String(formData.get("owner") || "").trim() || null;
+  if (!id) return;
+  await sql!`UPDATE initiative_tasks SET owner = ${owner} WHERE id = ${id}`;
+  revalidatePath("/cronogramas");
+}
+
 /** Mueve una tarea a otra fase, o la deja sin fase si phase_id viene vacio. */
 export async function updateTaskPhase(formData: FormData) {
   await ensureSchema();

@@ -1,5 +1,6 @@
 import type { Initiative } from "@/lib/data";
 import { diaDeFecha, hoyEnDias, fmtDiaMesAnio } from "@/lib/dates";
+import { GanttBar, GanttLabel, AnchoNombres, DesplegarEtapas } from "@/components/GanttInteractivo";
 
 const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
 
@@ -19,9 +20,11 @@ function fechaLarga(n: number): string {
  * responder "vamos atrasados?"; no pretende ser una linea base de valor ganado.
  */
 export function ProjectOverview({
-  initiatives, company, color,
+  initiatives, company, color, vista,
 }: {
   initiatives: Initiative[]; company: string; color: string;
+  /** Se usa en la clave de plegado, que es distinta por vista. */
+  vista: string;
 }) {
   const hoy = hoyEnDias();
 
@@ -139,47 +142,62 @@ export function ProjectOverview({
         </div>
       </div>
 
-      <div className="gantt-scroll">
-        <div className="gantt-inner po-gantt">
-          <div className="gantt-axis">
-            {marcas.map((mk, k) => (
-              <span key={k} className="gantt-mes" style={{ left: `${mk.pos}%` }}>{mk.etiqueta}</span>
-            ))}
-          </div>
-          <div className="gantt-rows">
-            {marcas.map((mk, k) => (
-              <span key={"g" + k} className="gantt-grid" style={{ left: `${mk.pos}%` }} aria-hidden="true" />
-            ))}
-            {posHoy !== null && (
-              <span className="gantt-hoy" style={{ left: `${posHoy}%` }} title="Hoy" aria-hidden="true" />
-            )}
-            {filas.map((f) => {
-              const izq = ((f.ini - min) / span) * 100;
-              const ancho = Math.max(0.8, ((f.fin - f.ini) / span) * 100);
-              const vencida = f.fin < hoy && f.progress < 100;
-              return (
-                <div className="gantt-row" key={f.id}>
-                  <div className="gantt-lbl" title={f.titulo}>{f.titulo}</div>
-                  <div className="gantt-track">
-                    <div
-                      className={"gantt-bar" + (vencida ? " vencida" : "") + (f.progress === 100 ? " lista" : "")}
-                      style={{ left: `${izq}%`, width: `${ancho}%`, borderColor: color }}
-                      title={`${f.titulo} · ${f.done}/${f.total} tareas · ${f.progress}%`}
-                    >
-                      <span className="gantt-fill" style={{ width: `${f.progress}%`, background: color }} />
-                      <span className="gantt-bar-txt mono">{f.progress}%</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      <div className="po-acciones">
+        <DesplegarEtapas />
       </div>
 
+      <AnchoNombres>
+        <div className="gantt-scroll">
+          <div className="gantt-inner po-gantt">
+            <div className="gantt-axis">
+              {marcas.map((mk, k) => (
+                <span key={k} className="gantt-mes" style={{ left: `${mk.pos}%` }}>{mk.etiqueta}</span>
+              ))}
+            </div>
+            <div className="gantt-rows">
+              {marcas.map((mk, k) => (
+                <span key={"g" + k} className="gantt-grid" style={{ left: `${mk.pos}%` }} aria-hidden="true" />
+              ))}
+              {posHoy !== null && (
+                <span className="gantt-hoy" style={{ left: `${posHoy}%` }} title="Hoy">
+                  <span className="gantt-hoy-lbl mono">HOY</span>
+                </span>
+              )}
+              {filas.map((f) => {
+                const izq = ((f.ini - min) / span) * 100;
+                const ancho = Math.max(0.8, ((f.fin - f.ini) / span) * 100);
+                const vencida = f.fin < hoy && f.progress < 100;
+                const clave = `crono.${vista}.${f.id}`;
+                const ancla = `crono-${f.id}`;
+                return (
+                  <div className="gantt-row" key={f.id}>
+                    <GanttLabel storageKey={clave} anchorId={ancla} titulo={f.titulo} />
+                    <div className="gantt-track">
+                      <GanttBar
+                        storageKey={clave}
+                        anchorId={ancla}
+                        titulo={f.titulo}
+                        izq={izq}
+                        ancho={ancho}
+                        progress={f.progress}
+                        color={color}
+                        vencida={vencida}
+                        lista={f.progress === 100}
+                        detalle={`${f.titulo} · ${f.done}/${f.total} tareas · ${f.progress}%`}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </AnchoNombres>
+
       <p className="pv-meta po-nota">
-        El <b>% de avance</b> son tareas marcadas como completadas sobre el total. Si va por debajo
-        del <b>% de tiempo</b>, el proyecto está consumiendo calendario más rápido de lo que avanza.
+        Pulsa cualquier barra o nombre para saltar al desglose de esa etapa. El <b>% de avance</b> son
+        tareas marcadas como completadas sobre el total; si va por debajo del <b>% de tiempo</b>, el
+        proyecto está consumiendo calendario más rápido de lo que avanza.
       </p>
     </div>
   );

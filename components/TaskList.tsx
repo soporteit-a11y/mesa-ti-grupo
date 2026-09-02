@@ -8,6 +8,7 @@ import { fmtDiaMes } from "@/lib/dates";
 type Task = {
   id: number; done: boolean; title: string;
   context?: string | null; start_date?: string | null; end_date?: string | null;
+  owner?: string | null;
 };
 
 /** Fecha corta de la tarea (la de fin, o la de inicio si no hay fin). */
@@ -16,13 +17,16 @@ function fechaCorta(t: Task): string | null {
 }
 
 export function TaskList({
-  initiativeId, tasks, locked = false, readOnly = false,
+  initiativeId, tasks, locked = false, readOnly = false, responsables = [], canEditOwner = false,
 }: {
   initiativeId: number; tasks: Task[];
   /** Rol colaborador: solo marcar/desmarcar. Sin reordenar, renombrar ni borrar. */
   locked?: boolean;
   /** Colaborador sin permiso de edicion: ni siquiera puede marcar. */
   readOnly?: boolean;
+  /** Responsables ya usados, para autocompletar. */
+  responsables?: string[];
+  canEditOwner?: boolean;
 }) {
   const [items, setItems] = useState<Task[]>(tasks);
   const dragIndex = useRef<number | null>(null);
@@ -73,6 +77,9 @@ export function TaskList({
               title={t.title}
               context={t.context}
               fecha={fechaCorta(t)}
+              owner={t.owner}
+              responsables={responsables}
+              canEditOwner={canEditOwner}
               locked
               readOnly={readOnly}
             />
@@ -106,7 +113,16 @@ export function TaskList({
             <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Subir tarea">▲</button>
             <button type="button" onClick={() => move(i, 1)} disabled={i === items.length - 1} aria-label="Bajar tarea">▼</button>
           </div>
-          <TaskItem id={t.id} done={t.done} title={t.title} context={t.context} fecha={fechaCorta(t)} />
+          <TaskItem
+            id={t.id}
+            done={t.done}
+            title={t.title}
+            context={t.context}
+            fecha={fechaCorta(t)}
+            owner={t.owner}
+            responsables={responsables}
+            canEditOwner={canEditOwner}
+          />
         </div>
       ))}
     </div>
