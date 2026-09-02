@@ -77,8 +77,14 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 .auth-brand .bt { font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: .02em; line-height: 1.1; }
 .auth-brand .bs { font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); letter-spacing: .04em; }
 .auth-title { font-size: 1.1rem; }
-.auth-error { font-size: 12.5px; color: var(--crit); background: var(--crit-w); border: 1px solid var(--crit); border-radius: var(--radius-sm); padding: 8px 10px; margin: 0; }
+.auth-error { font-size: 12.5px; color: var(--crit); background: var(--crit-w); border: 1px solid var(--crit); border-radius: var(--radius-sm); padding: 8px 10px; margin: 0; line-height: 1.5; }
+.auth-warn { font-size: 12.5px; color: var(--high); background: var(--high-w); border: 1px solid var(--high); border-radius: var(--radius-sm); padding: 8px 10px; margin: 0; line-height: 1.5; }
+.auth-ok { font-size: 12.5px; color: var(--accent-ink); background: var(--accent-wash); border: 1px solid var(--accent); border-radius: var(--radius-sm); padding: 10px 12px; margin: 0; line-height: 1.5; }
 .auth-submit { width: 100%; justify-content: center; }
+.auth-form { display: flex; flex-direction: column; gap: 18px; }
+.auth-foot { font-size: 12px; color: var(--muted); text-align: center; margin: 0; line-height: 1.6; }
+.auth-link { color: var(--accent-ink); font-weight: 600; }
+.auth-link:hover { text-decoration: underline; }
 
 /* Texto solo para lectores de pantalla */
 .sr-only {
@@ -373,6 +379,15 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .cfg-user-clabel { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .cfg-chk { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-soft); cursor: pointer; }
 .cfg-chk input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; margin: 0; }
+.cfg-row-user.pendiente { border-color: var(--high); background: var(--high-w); }
+.cfg-user-actions { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+.cfg-count.pend { color: var(--high); background: var(--high-w); }
+.cfg-toggle-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  padding: 11px 13px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface-2);
+}
+.cfg-toggle-row > div { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 220px; font-size: 13px; }
+.cfg-toggle-row .pv-meta { line-height: 1.45; }
 .cfg-add-user { flex-wrap: wrap; row-gap: 10px; }
 .cfg-add-user input[type=password] { flex: 1; min-width: 150px; font-size: 13px; padding: 7px 10px; }
 .cfg-add-user .cfg-user-companies { flex: 1 1 100%; }
@@ -513,6 +528,8 @@ dialog::backdrop { background: rgba(3,6,10,.65); backdrop-filter: blur(2px); }
 .task-item { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 6px; }
 .task-item:hover { background: var(--surface-2); }
 .task-check-box { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; }
+/* Sin permiso de edicion: la casilla se ve igual pero no responde */
+.task-check-box.ro { cursor: not-allowed; opacity: .65; }
 .task-check-box input { position: absolute; opacity: 0; width: 0; height: 0; }
 .task-check-box .box { width: 17px; height: 17px; border: 1.5px solid var(--line-strong); border-radius: 5px; display: grid; place-items: center; transition: all .15s ease; }
 .task-check-box .box::after { content: "\2713"; font-size: 11px; color: #0A0E15; opacity: 0; font-weight: 700; }

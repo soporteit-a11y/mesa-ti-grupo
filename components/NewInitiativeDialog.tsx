@@ -10,7 +10,7 @@ export function NewInitiativeDialog({ companies }: { companies: any[] }) {
   return (
     <>
       <button className="btn primary" onClick={() => ref.current?.showModal()}>
-        + Nueva ruta
+        + Nuevo cronograma
       </button>
       <dialog ref={ref}>
         <form
@@ -22,7 +22,7 @@ export function NewInitiativeDialog({ companies }: { companies: any[] }) {
           }}
         >
           <div className="dialog-head">
-            <h3>Nueva ruta de trabajo</h3>
+            <h3>Nuevo cronograma</h3>
             <button type="button" className="x-btn" onClick={() => ref.current?.close()}>&times;</button>
           </div>
           <div className="dialog-body form-grid">
@@ -42,7 +42,7 @@ export function NewInitiativeDialog({ companies }: { companies: any[] }) {
               </div>
             </div>
             <div className="field">
-              <label>Titulo de la ruta *</label>
+              <label>Titulo del cronograma *</label>
               <input type="text" name="title" required placeholder="Ej: Aseguramiento perimetral FortiGate" />
             </div>
             <div className="row2">
@@ -64,7 +64,7 @@ export function NewInitiativeDialog({ companies }: { companies: any[] }) {
             <span className="pv-meta mono">Las tareas se convierten en checklist con avance</span>
             <div style={{ display: "flex", gap: 8 }}>
               <button type="button" className="btn" onClick={() => ref.current?.close()}>Cancelar</button>
-              <button type="submit" className="btn primary" disabled={busy}>{busy ? "Creando..." : "Crear ruta"}</button>
+              <button type="submit" className="btn primary" disabled={busy}>{busy ? "Creando..." : "Crear cronograma"}</button>
             </div>
           </div>
         </form>

@@ -2,6 +2,16 @@
 // corre en Edge Runtime, y db.ts arrastra `crypto` de Node (ver lib/sql.ts).
 import { sql } from "./sql";
 
+/**
+ * Datos minimos de sesion. A proposito NO incluye permisos ni `approved`:
+ * este SELECT lo ejecuta el middleware en cada request, incluso justo despues
+ * de un despliegue que agregue columnas nuevas, antes de que ensureSchema()
+ * haya podido correr. Si pidiera una columna que todavia no existe, la consulta
+ * fallaria y dejaria a todo el mundo fuera del sistema.
+ *
+ * Los permisos se leen del lado Node en getCurrentUser() (lib/auth.ts), que si
+ * puede llamar a ensureSchema() antes.
+ */
 export type SessionUser = { id: number; name: string; email: string; role: string };
 
 export async function getSession(token: string | undefined | null): Promise<SessionUser | null> {

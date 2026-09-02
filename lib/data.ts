@@ -24,9 +24,10 @@ export async function getUsers() {
   await ensureSchema();
   const rows = await sql!`
     SELECT u.id, u.name, u.email, u.role, u.created_at,
+      u.approved, u.can_edit_schedule, u.can_create_tickets,
       COALESCE(ARRAY_AGG(uc.company_id) FILTER (WHERE uc.company_id IS NOT NULL), '{}') AS company_ids
     FROM users u LEFT JOIN user_companies uc ON uc.user_id = u.id
-    GROUP BY u.id ORDER BY u.role, u.name`;
+    GROUP BY u.id ORDER BY u.approved, u.role, u.name`;
   // company_ids puede llegar como arreglo real o como texto '{1,2}' segun como
   // el driver interprete el tipo; se normaliza aqui para que la pagina no tenga
   // que preocuparse por eso.
@@ -36,6 +37,17 @@ export async function getUsers() {
       ? r.company_ids.map(Number)
       : String(r.company_ids || "").replace(/[{}]/g, "").split(",").filter(Boolean).map(Number),
   }));
+}
+
+/**
+ * Si el auto-registro publico esta habilitado. Sin fila en `meta` se considera
+ * abierto: las cuentas nacen sin aprobar de todos modos, asi que lo peor que
+ * puede pasar es que se acumulen solicitudes. Se apaga desde /config.
+ */
+export async function getRegistroAbierto(): Promise<boolean> {
+  await ensureSchema();
+  const rows = await sql!`SELECT v FROM meta WHERE k = 'registro_abierto'`;
+  return rows.length === 0 ? true : rows[0].v === "1";
 }
 
 /**
@@ -245,7 +257,7 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
   };
 }
 
-/* ---------- Rutas de trabajo (modulo aparte) ---------- */
+/* ---------- Cronogramas (modulo aparte; antes "Rutas de trabajo") ---------- */
 export type Initiative = {
   id: number;
   title: string;

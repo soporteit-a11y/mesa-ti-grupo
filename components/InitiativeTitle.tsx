@@ -24,7 +24,7 @@ export function InitiativeTitle({ id, title }: { id: number; title: string }) {
           if (e.key === "Escape") { setValue(title); (e.target as HTMLInputElement).blur(); }
         }}
         className="init-title-input"
-        title="Clic para editar el título de la ruta"
+        title="Clic para editar el título del cronograma"
       />
     </form>
   );

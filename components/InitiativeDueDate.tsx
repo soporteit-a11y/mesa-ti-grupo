@@ -14,7 +14,7 @@ export function InitiativeDueDate({ id, dueDate }: { id: number; dueDate: string
         defaultValue={dueDate ?? ""}
         onChange={() => ref.current?.requestSubmit()}
         className="init-due-input"
-        title="Fecha límite de la ruta"
+        title="Fecha límite del cronograma"
       />
     </form>
   );

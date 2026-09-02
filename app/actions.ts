@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { verifyPassword, hashPassword } from "@/lib/password";
 import { createSessionCookie, clearSessionCookie, getCurrentUser, requireAdmin } from "@/lib/auth";
+import { getRegistroAbierto } from "@/lib/data";
 
 export async function login(formData: FormData) {
   await ensureSchema();
@@ -12,12 +13,42 @@ export async function login(formData: FormData) {
   const password = String(formData.get("password") || "");
   if (!email || !password) redirect("/login?error=1");
 
-  const rows = await sql!`SELECT id, password_hash, role FROM users WHERE lower(email) = ${email}`;
-  const user = rows[0] as { id: number; password_hash: string; role: string } | undefined;
+  const rows = await sql!`SELECT id, password_hash, role, approved FROM users WHERE lower(email) = ${email}`;
+  const user = rows[0] as { id: number; password_hash: string; role: string; approved: boolean } | undefined;
   if (!user || !verifyPassword(password, user.password_hash)) redirect("/login?error=1");
+
+  // Las cuentas creadas por auto-registro nacen sin aprobar. No se les crea
+  // sesion: asi una cuenta pendiente no existe para el resto del sistema y el
+  // middleware no necesita saber nada de aprobaciones.
+  if (!user!.approved) redirect("/login?pendiente=1");
 
   await createSessionCookie(user!.id);
   redirect(user!.role === "admin" ? "/" : "/mis-tickets");
+}
+
+/**
+ * Auto-registro publico. Crea la cuenta SIN aprobar y sin ninguna empresa
+ * asignada: hasta que un admin la apruebe en /config, no puede iniciar sesion.
+ * Esto es deliberado — la URL es publica, y sin este paso cualquiera en internet
+ * tendria una cuenta con acceso al sistema.
+ */
+export async function registerUser(formData: FormData) {
+  await ensureSchema();
+  if (!(await getRegistroAbierto())) redirect("/registro?cerrado=1");
+
+  const name = String(formData.get("name") || "").trim();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("password") || "");
+  if (!name || !email || password.length < 8) redirect("/registro?error=1");
+
+  const rows = await sql!`INSERT INTO users (name, email, password_hash, role, approved, can_edit_schedule, can_create_tickets)
+    VALUES (${name}, ${email}, ${hashPassword(password)}, 'agent', false, false, true)
+    ON CONFLICT (email) DO NOTHING RETURNING id`;
+  // Si el correo ya existe se muestra el mismo mensaje de exito a proposito:
+  // decir "ese correo ya esta registrado" permitiria averiguar quien tiene
+  // cuenta en el sistema probando correos.
+  revalidatePath("/config");
+  redirect("/registro?listo=1");
 }
 
 export async function logout() {
@@ -42,14 +73,46 @@ export async function createUser(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
   const role = String(formData.get("role") || "agent") === "admin" ? "admin" : "agent";
+  const canEdit = formData.get("can_edit_schedule") != null;
+  const canTicket = formData.get("can_create_tickets") != null;
   if (!name || !email || !password) return;
 
-  const rows = await sql!`INSERT INTO users (name, email, password_hash, role)
-    VALUES (${name}, ${email}, ${hashPassword(password)}, ${role})
+  const rows = await sql!`INSERT INTO users (name, email, password_hash, role, approved, can_edit_schedule, can_create_tickets)
+    VALUES (${name}, ${email}, ${hashPassword(password)}, ${role}, true, ${canEdit}, ${canTicket})
     ON CONFLICT (email) DO NOTHING RETURNING id`;
   if (rows.length === 0) return; // correo ya usado
   await saveUserCompanies(rows[0].id, formData);
   revalidatePath("/config");
+}
+
+/** Aprueba o revoca una cuenta (las del auto-registro nacen sin aprobar). */
+export async function setUserApproved(formData: FormData) {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+  const id = Number(formData.get("id"));
+  const approved = String(formData.get("approved")) === "1";
+  if (!id) return;
+
+  const me = await getCurrentUser();
+  if (me?.id === id) return; // no revocarte a ti mismo
+
+  await sql!`UPDATE users SET approved = ${approved} WHERE id = ${id}`;
+  // Al revocar se cierran sus sesiones abiertas: si no, seguiria dentro hasta
+  // que la cookie caducara sola.
+  if (!approved) await sql!`DELETE FROM sessions WHERE user_id = ${id}`;
+  revalidatePath("/config");
+}
+
+/** Abre o cierra el auto-registro publico desde /config. */
+export async function setRegistroAbierto(formData: FormData) {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+  const abierto = String(formData.get("abierto")) === "1" ? "1" : "0";
+  await sql!`INSERT INTO meta (k, v) VALUES ('registro_abierto', ${abierto})
+    ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
+  revalidatePath("/config");
+  revalidatePath("/registro");
+  revalidatePath("/login");
 }
 
 export async function updateUser(formData: FormData) {
@@ -60,6 +123,8 @@ export async function updateUser(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
   const role = String(formData.get("role") || "agent") === "admin" ? "admin" : "agent";
+  const canEdit = formData.get("can_edit_schedule") != null;
+  const canTicket = formData.get("can_create_tickets") != null;
   if (!id || !name || !email) return;
 
   // No dejar el sistema sin ningun admin: si este era el ultimo y se le quita
@@ -70,7 +135,8 @@ export async function updateUser(formData: FormData) {
     if (admins[0].n === 0) finalRole = "admin";
   }
 
-  await sql!`UPDATE users SET name = ${name}, email = ${email}, role = ${finalRole} WHERE id = ${id}`;
+  await sql!`UPDATE users SET name = ${name}, email = ${email}, role = ${finalRole},
+    can_edit_schedule = ${canEdit}, can_create_tickets = ${canTicket} WHERE id = ${id}`;
   if (password) {
     await sql!`UPDATE users SET password_hash = ${hashPassword(password)} WHERE id = ${id}`;
     // Al cambiar la clave se cierran las sesiones abiertas de ese usuario.
@@ -78,7 +144,7 @@ export async function updateUser(formData: FormData) {
   }
   await saveUserCompanies(id, formData);
   revalidatePath("/config");
-  revalidatePath("/rutas");
+  revalidatePath("/cronogramas");
 }
 
 export async function deleteUser(formData: FormData) {
@@ -110,9 +176,11 @@ export async function createTicket(formData: FormData) {
   // El autor sale de la sesion, nunca de un campo del formulario: es lo que
   // despues decide que tickets ve un agente en /mis-tickets.
   const me = await getCurrentUser();
+  if (!me) return;
+  if (me.role !== "admin" && !me.can_create_tickets) return;
 
   await sql!`INSERT INTO tickets (title, description, company_id, category, priority, status, requester, created_by)
-    VALUES (${title}, ${description}, ${company_id}, ${category}, ${priority}, 'nuevo', ${requester}, ${me?.id ?? null})`;
+    VALUES (${title}, ${description}, ${company_id}, ${category}, ${priority}, 'nuevo', ${requester}, ${me.id})`;
 
   revalidatePath("/tickets");
   revalidatePath("/mis-tickets");
@@ -350,7 +418,7 @@ export async function setStatus(formData: FormData) {
   revalidatePath("/");
 }
 
-/* ---------- Rutas de trabajo ---------- */
+/* ---------- Cronogramas (antes "Rutas de trabajo") ---------- */
 export async function createInitiative(formData: FormData) {
   await ensureSchema();
   if (!(await requireAdmin())) return;
@@ -371,7 +439,7 @@ export async function createInitiative(formData: FormData) {
     await sql!`INSERT INTO initiative_tasks (initiative_id, title, position) VALUES (${id}, ${t}, ${pos})`;
     pos++;
   }
-  revalidatePath("/rutas");
+  revalidatePath("/cronogramas");
   revalidatePath("/");
 }
 
@@ -390,6 +458,8 @@ export async function toggleTask(formData: FormData) {
 
   if (me.role === "admin") {
     await sql!`UPDATE initiative_tasks SET done = NOT done WHERE id = ${id}`;
+  } else if (!me.can_edit_schedule) {
+    return; // permiso de solo lectura sobre cronogramas
   } else {
     await sql!`
       UPDATE initiative_tasks t SET done = NOT t.done
@@ -400,7 +470,7 @@ export async function toggleTask(formData: FormData) {
           WHERE uc.user_id = ${me.id} AND uc.company_id = i.company_id
         )`;
   }
-  revalidatePath("/rutas");
+  revalidatePath("/cronogramas");
   revalidatePath("/");
 }
 
@@ -412,7 +482,7 @@ export async function addTask(formData: FormData) {
   if (!initiative_id || !title) return;
   const pos = await sql!`SELECT COALESCE(MAX(position), -1) + 1 AS p FROM initiative_tasks WHERE initiative_id = ${initiative_id}`;
   await sql!`INSERT INTO initiative_tasks (initiative_id, title, position) VALUES (${initiative_id}, ${title}, ${pos[0].p})`;
-  revalidatePath("/rutas");
+  revalidatePath("/cronogramas");
 }
 
 export async function updateTaskTitle(formData: FormData) {
@@ -422,7 +492,7 @@ export async function updateTaskTitle(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   if (!id || !title) return;
   await sql!`UPDATE initiative_tasks SET title = ${title} WHERE id = ${id}`;
-  revalidatePath("/rutas");
+  revalidatePath("/cronogramas");
 }
 
 export async function deleteTask(formData: FormData) {
@@ -431,7 +501,7 @@ export async function deleteTask(formData: FormData) {
   const id = Number(formData.get("id"));
   if (!id) return;
   await sql!`DELETE FROM initiative_tasks WHERE id = ${id}`;
-  revalidatePath("/rutas");
+  revalidatePath("/cronogramas");
   revalidatePath("/");
 }
 
@@ -442,7 +512,7 @@ export async function setInitiativeStatus(formData: FormData) {
   const status = String(formData.get("status"));
   if (!id || !status) return;
   await sql!`UPDATE initiatives SET status = ${status} WHERE id = ${id}`;
-  revalidatePath("/rutas");
+  revalidatePath("/cronogramas");
   revalidatePath("/");
 }
 
@@ -453,7 +523,7 @@ export async function updateInitiativeTitle(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   if (!id || !title) return;
   await sql!`UPDATE initiatives SET title = ${title} WHERE id = ${id}`;
-  revalidatePath("/rutas");
+  revalidatePath("/cronogramas");
   revalidatePath("/");
 }
 
@@ -464,7 +534,7 @@ export async function updateInitiativeDueDate(formData: FormData) {
   const due_date = String(formData.get("due_date") || "") || null;
   if (!id) return;
   await sql!`UPDATE initiatives SET due_date = ${due_date} WHERE id = ${id}`;
-  revalidatePath("/rutas");
+  revalidatePath("/cronogramas");
 }
 
 export async function deleteInitiative(formData: FormData) {
@@ -473,7 +543,7 @@ export async function deleteInitiative(formData: FormData) {
   const id = Number(formData.get("id"));
   if (!id) return;
   await sql!`DELETE FROM initiatives WHERE id = ${id}`;
-  revalidatePath("/rutas");
+  revalidatePath("/cronogramas");
   revalidatePath("/");
 }
 
@@ -486,5 +556,5 @@ export async function reorderTasks(formData: FormData) {
   for (let i = 0; i < order.length; i++) {
     await sql!`UPDATE initiative_tasks SET position = ${i} WHERE id = ${order[i]} AND initiative_id = ${initiative_id}`;
   }
-  revalidatePath("/rutas");
+  revalidatePath("/cronogramas");
 }

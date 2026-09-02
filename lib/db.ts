@@ -88,6 +88,12 @@ async function init(q: NonNullable<typeof sql>) {
   await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS phone TEXT`;
   await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolution_minutes INT`;
   await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id)`;
+  // Permisos por cuenta. Por defecto en true/aprobado para no cambiarle nada a
+  // las cuentas que ya existen; el auto-registro los pone explicitamente en
+  // false (ver registerUser en app/actions.ts).
+  await q`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_edit_schedule BOOLEAN NOT NULL DEFAULT true`;
+  await q`ALTER TABLE users ADD COLUMN IF NOT EXISTS can_create_tickets BOOLEAN NOT NULL DEFAULT true`;
+  await q`ALTER TABLE users ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT true`;
   try { await q`ALTER TABLE tickets ALTER COLUMN priority DROP NOT NULL`; } catch (e) {}
 
   // Limpieza de columnas y tabla del modelo de priorizacion P1-P4, ya sin uso (2026-08-25).

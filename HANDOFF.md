@@ -40,7 +40,7 @@ Tiene cuatro módulos, uno por cada entrada del menú lateral:
 |---|---|---|
 | `/` | **Dashboard** | Informe visual: KPIs, donas, barras por categoría y por día, tickets recientes, filtro por rango de fechas. |
 | `/tickets` | **Mesa de ayuda** | Bandeja de tickets: crear, filtrar, editar, comentar, cambiar estado, ver cumplimiento de SLA. |
-| `/rutas` | **Rutas de trabajo** | Proyectos/iniciativas por empresa con checklist de tareas y barra de avance. |
+| `/cronogramas` | **Cronogramas** | Proyectos/iniciativas por empresa con checklist de tareas y barra de avance. Se llamaba "Rutas de trabajo" y vivía en `/rutas` hasta el 2026-09-02; esa ruta sigue existiendo solo como redirección. |
 | `/config` | **Configuración** | CRUD de empresas, categorías (con su SLA), colaboradores y respuestas rápidas. |
 
 ### Principio rector del proyecto
@@ -445,8 +445,21 @@ cada página ya se queda fija arriba y dos elementos pegados a `top: 0` se solap
 **Cambiar la contraseña cierra las sesiones abiertas.** `updateUser`, si recibe una clave nueva,
 borra las filas de `sessions` de ese usuario. Dejar la clave vacía al editar no la cambia.
 
-**Dos protecciones para no quedarte fuera de tu propio sistema:** no puedes eliminar tu propia
-cuenta, y no puedes eliminar (ni degradar a colaborador) al último admin que quede.
+**Dos protecciones para no quedarte fuera de tu propio sistema:** no puedes eliminar ni desactivar
+tu propia cuenta, y no puedes eliminar (ni degradar a colaborador) al último admin que quede.
+
+**Permisos granulares (agregado en la tanda 3).** El rol define lo grueso; dos columnas en `users`
+afinan lo que puede un colaborador: `can_edit_schedule` (marcar tareas en cronogramas — apagado
+significa que los ve en modo consulta) y `can_create_tickets`. Se editan con casillas en `/config`
+y se comprueban en el servidor dentro de `toggleTask` y `createTicket`, no solo escondiendo la
+interfaz.
+
+**Auto-registro (`/registro`).** Existe, pero **una cuenta registrada por ahí no puede entrar
+hasta que un admin la apruebe** (`users.approved`), y nace sin ninguna empresa asignada. Esto no
+es opcional: la URL del sistema es pública. `login` rechaza a las cuentas no aprobadas *antes* de
+crear la sesión, de modo que una cuenta pendiente sencillamente no existe para el resto del
+sistema — por eso el middleware no necesita saber nada de aprobaciones. El auto-registro completo
+se puede apagar desde `/config` (clave `registro_abierto` en `meta`).
 
 ---
 
@@ -985,6 +998,37 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 2 de septiembre de 2026 (tanda 3) — "Cronogramas", permisos granulares y auto-registro
+
+- **Renombre del módulo.** "Rutas de trabajo" pasa a llamarse **Cronogramas** y la ruta se movió
+  de `/rutas` a `/cronogramas`. `app/rutas/page.tsx` queda como una redirección permanente para
+  que los enlaces guardados sigan funcionando. Se renombró también el texto de todos los
+  componentes del módulo ("Nueva ruta" → "Nuevo cronograma", etc.) y los `revalidatePath`.
+- **Permisos por cuenta, no solo por rol.** Dos columnas nuevas en `users`:
+  `can_edit_schedule` (puede marcar tareas en cronogramas — si está apagado los ve pero no los
+  toca) y `can_create_tickets`. Se editan con casillas en `/config`. Ambas por defecto en `true`
+  para no cambiarle nada a las cuentas existentes. Se aplican **en el servidor** (`toggleTask` y
+  `createTicket`) además de en la interfaz.
+- **Auto-registro público con aprobación.** Nueva página `/registro` y acción `registerUser`.
+  Punto clave de diseño: **las cuentas nacen sin aprobar y sin ninguna empresa asignada**. La URL
+  es pública; sin ese paso, cualquiera en internet tendría acceso al sistema. `login` rechaza a
+  las cuentas no aprobadas antes de crear ninguna sesión, así el middleware no necesita saber nada
+  de aprobaciones. El admin ve las pendientes resaltadas en `/config` y las aprueba con un botón.
+  El auto-registro se puede cerrar por completo desde `/config` (clave `registro_abierto` en
+  `meta`; sin fila se considera abierto).
+- **`registerUser` no revela si un correo ya existe:** si el `INSERT ... ON CONFLICT DO NOTHING`
+  no inserta nada, igual muestra el mismo mensaje de éxito. Decir "ese correo ya está registrado"
+  permitiría averiguar quién tiene cuenta probando correos.
+- **Los permisos se leen del lado Node, no en el middleware.** `getSession()` (lib/session.ts)
+  sigue seleccionando **solo** `id, name, email, role`. Es deliberado: ese `SELECT` corre en cada
+  request, incluso justo después de un despliegue que agregue columnas, antes de que
+  `ensureSchema()` haya podido correr. Si pidiera `approved` o `can_edit_schedule` antes de que
+  existieran, la consulta fallaría y **dejaría a todo el mundo fuera del sistema**. Por eso
+  `getCurrentUser()` (lib/auth.ts) hace su propia consulta más rica, que sí puede llamar a
+  `ensureSchema()` primero. **Si agregas columnas a `users`, no las metas en `getSession()`.**
+- `setUserApproved` cierra las sesiones abiertas al revocar una cuenta, y no deja que te revoques
+  a ti mismo.
 
 ### 2 de septiembre de 2026 (tanda 2 de 2) — Roles reales: middleware, usuarios y menú de perfil
 

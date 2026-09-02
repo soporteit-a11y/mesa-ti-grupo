@@ -91,13 +91,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     badge={alerts.breached}
                     badgeWarn={alerts.dueSoon}
                   />
-                  <NavLink href="/rutas" label="Rutas de trabajo" icon="route" />
+                  <NavLink href="/cronogramas" label="Cronogramas" icon="route" />
                   <NavLink href="/config" label="Configuración" icon="settings" />
                 </>
               ) : (
                 <>
                   <NavLink href="/mis-tickets" label="Mis reportes" icon="inbox" />
-                  <NavLink href="/rutas" label="Rutas de trabajo" icon="route" />
+                  <NavLink href="/cronogramas" label="Cronogramas" icon="route" />
                 </>
               )}
             </nav>

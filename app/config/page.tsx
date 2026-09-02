@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { hasDb } from "@/lib/db";
-import { getCompanies, getCategories, getCollaborators, getCanned, getUsers } from "@/lib/data";
+import { getCompanies, getCategories, getCollaborators, getCanned, getUsers, getRegistroAbierto } from "@/lib/data";
 import { getCurrentUser } from "@/lib/auth";
 import { Setup } from "@/components/Setup";
 import { SlaInput } from "@/components/SlaInput";
@@ -9,7 +9,7 @@ import {
   createCategory, updateCategory, deleteCategory,
   createCollaborator, updateCollaborator, deleteCollaborator,
   createCanned, deleteCanned,
-  createUser, updateUser, deleteUser,
+  createUser, updateUser, deleteUser, setUserApproved, setRegistroAbierto,
 } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -24,13 +24,16 @@ export default async function ConfigPage() {
   if (me.role !== "admin") redirect("/mis-tickets");
 
   let companies: any[], categories: any[], collaborators: any[], canned: any[], users: any[];
+  let registroAbierto: boolean;
   try {
-    [companies, categories, collaborators, canned, users] = await Promise.all([
-      getCompanies(), getCategories(), getCollaborators(), getCanned(), getUsers(),
+    [companies, categories, collaborators, canned, users, registroAbierto] = await Promise.all([
+      getCompanies(), getCategories(), getCollaborators(), getCanned(), getUsers(), getRegistroAbierto(),
     ]);
   } catch (e) {
     return <Setup />;
   }
+
+  const pendientes = users.filter((u) => !u.approved).length;
 
   return (
     <>
@@ -103,13 +106,32 @@ export default async function ConfigPage() {
         {/* ---------- Usuarios con acceso al sistema ---------- */}
         <div className="section-title">
           <h2>Usuarios del sistema</h2>
-          <span className="hint">quién puede entrar, con qué rol y qué empresas ve en Rutas de trabajo</span>
+          <span className="hint">quién puede entrar, con qué rol y qué empresas ve en Cronogramas</span>
         </div>
         <div className="card cfg-card">
-          <div className="cfg-head">Cuentas <span className="cfg-count">{users.length}</span></div>
+          <div className="cfg-head">
+            Cuentas <span className="cfg-count">{users.length}</span>
+            {pendientes > 0 ? <span className="cfg-count pend">{pendientes} pendiente(s)</span> : null}
+          </div>
+
+          <form action={setRegistroAbierto} className="cfg-toggle-row">
+            <div>
+              <b>Auto-registro público</b>
+              <span className="pv-meta">
+                {registroAbierto
+                  ? "Cualquiera con el enlace puede solicitar una cuenta desde /registro. Las solicitudes NO tienen acceso hasta que las apruebes aquí."
+                  : "Nadie puede solicitar cuenta; solo tú puedes crearlas desde aquí."}
+              </span>
+            </div>
+            <input type="hidden" name="abierto" value={registroAbierto ? "0" : "1"} />
+            <button type="submit" className={"btn sm" + (registroAbierto ? "" : " primary")}>
+              {registroAbierto ? "Cerrar registro" : "Abrir registro"}
+            </button>
+          </form>
+
           <div className="cfg-list">
             {users.map((u) => (
-              <div className="cfg-row cfg-row-user" key={u.id}>
+              <div className={"cfg-row cfg-row-user" + (u.approved ? "" : " pendiente")} key={u.id}>
                 <form action={updateUser} className="cfg-edit cfg-edit-user">
                   <input type="hidden" name="id" value={u.id} />
                   <div className="cfg-user-line">
@@ -122,26 +144,58 @@ export default async function ConfigPage() {
                     <input type="password" name="password" placeholder="Nueva clave (opcional)" className="cfg-contact-input" autoComplete="new-password" />
                     <button type="submit" className="btn sm" title="Guardar">✓</button>
                   </div>
-                  <div className="cfg-user-companies">
-                    <span className="cfg-user-clabel">Empresas visibles</span>
-                    {companies.map((co) => (
-                      <label className="cfg-chk" key={co.id}>
-                        <input
-                          type="checkbox"
-                          name="company_ids"
-                          value={co.id}
-                          defaultChecked={u.company_ids.includes(co.id)}
-                        />
-                        {co.name}
-                      </label>
-                    ))}
-                    {u.role === "admin" ? <span className="pv-meta">— un super admin ve todas de todos modos</span> : null}
-                  </div>
+                  {u.role !== "admin" && (
+                    <>
+                      <div className="cfg-user-companies">
+                        <span className="cfg-user-clabel">Empresas visibles</span>
+                        {companies.map((co) => (
+                          <label className="cfg-chk" key={co.id}>
+                            <input
+                              type="checkbox"
+                              name="company_ids"
+                              value={co.id}
+                              defaultChecked={u.company_ids.includes(co.id)}
+                            />
+                            {co.name}
+                          </label>
+                        ))}
+                      </div>
+                      <div className="cfg-user-companies">
+                        <span className="cfg-user-clabel">Permisos</span>
+                        <label className="cfg-chk">
+                          <input type="checkbox" name="can_edit_schedule" defaultChecked={u.can_edit_schedule} />
+                          Puede marcar tareas en cronogramas
+                        </label>
+                        <label className="cfg-chk">
+                          <input type="checkbox" name="can_create_tickets" defaultChecked={u.can_create_tickets} />
+                          Puede reportar tickets
+                        </label>
+                      </div>
+                    </>
+                  )}
+                  {u.role === "admin" && (
+                    <div className="cfg-user-companies">
+                      <span className="pv-meta">Un super admin ve todas las empresas y tiene todos los permisos.</span>
+                    </div>
+                  )}
                 </form>
-                <form action={deleteUser}>
-                  <input type="hidden" name="id" value={u.id} />
-                  <button type="submit" className="btn sm danger" title="Eliminar cuenta">✕</button>
-                </form>
+                <div className="cfg-user-actions">
+                  <form action={setUserApproved}>
+                    <input type="hidden" name="id" value={u.id} />
+                    <input type="hidden" name="approved" value={u.approved ? "0" : "1"} />
+                    <button
+                      type="submit"
+                      className={"btn sm" + (u.approved ? "" : " primary")}
+                      title={u.approved ? "Revocar el acceso de esta cuenta" : "Aprobar esta cuenta"}
+                    >
+                      {u.approved ? "Activa" : "Aprobar"}
+                    </button>
+                  </form>
+                  <form action={deleteUser}>
+                    <input type="hidden" name="id" value={u.id} />
+                    <button type="submit" className="btn sm danger" title="Eliminar cuenta">✕</button>
+                  </form>
+                </div>
               </div>
             ))}
           </div>
@@ -162,12 +216,24 @@ export default async function ConfigPage() {
                 </label>
               ))}
             </div>
+            <div className="cfg-user-companies">
+              <span className="cfg-user-clabel">Permisos</span>
+              <label className="cfg-chk">
+                <input type="checkbox" name="can_edit_schedule" defaultChecked />
+                Puede marcar tareas en cronogramas
+              </label>
+              <label className="cfg-chk">
+                <input type="checkbox" name="can_create_tickets" defaultChecked />
+                Puede reportar tickets
+              </label>
+            </div>
             <button type="submit" className="btn primary sm">Crear cuenta</button>
           </form>
           <p className="pv-meta" style={{ marginTop: 2 }}>
-            Un <b>colaborador</b> solo puede reportar tickets, ver los suyos, y ver y marcar tareas de las
-            rutas de las empresas que le marques aquí. Deja la clave vacía al editar para no cambiarla.
-            No puedes eliminar tu propia cuenta ni dejar el sistema sin ningún super admin.
+            Un <b>colaborador</b> ve solo los cronogramas de las empresas que le marques, y sus propios
+            tickets. Con los permisos decides si además puede <b>marcar tareas</b> (si no, las ve pero no
+            las toca) y si puede <b>reportar tickets</b>. Deja la clave vacía al editar para no cambiarla.
+            No puedes eliminar ni desactivar tu propia cuenta, ni dejar el sistema sin ningún super admin.
           </p>
         </div>
 
@@ -248,7 +314,7 @@ export default async function ConfigPage() {
         </div>
 
         <p className="pv-meta" style={{ marginTop: 16 }}>
-          Los cambios se aplican al instante en la Mesa de ayuda. Una empresa solo se puede eliminar si no tiene tickets, colaboradores ni rutas asociadas.
+          Los cambios se aplican al instante en la Mesa de ayuda. Una empresa solo se puede eliminar si no tiene tickets, colaboradores ni cronogramas asociados.
         </p>
       </div>
     </>

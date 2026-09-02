@@ -7,6 +7,9 @@ import { getSession } from "@/lib/session";
  */
 const SOLO_ADMIN = ["/", "/tickets", "/config"];
 
+/** Unicas rutas accesibles sin haber iniciado sesion. */
+const PUBLICAS = ["/login", "/registro"];
+
 function esRutaAdmin(pathname: string): boolean {
   return SOLO_ADMIN.some((p) => (p === "/" ? pathname === "/" : pathname === p || pathname.startsWith(p + "/")));
 }
@@ -15,9 +18,9 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const user = await getSession(req.cookies.get("session")?.value);
 
-  // Sin sesion: solo se puede ver /login.
+  // Sin sesion: solo se pueden ver las rutas publicas.
   if (!user) {
-    if (pathname === "/login") return NextResponse.next();
+    if (PUBLICAS.includes(pathname)) return NextResponse.next();
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
@@ -26,8 +29,8 @@ export async function middleware(req: NextRequest) {
 
   const inicio = user.role === "admin" ? "/" : "/mis-tickets";
 
-  // Ya con sesion, /login no tiene sentido: se manda a su pantalla de inicio.
-  if (pathname === "/login") {
+  // Ya con sesion, login/registro no tienen sentido: a su pantalla de inicio.
+  if (PUBLICAS.includes(pathname)) {
     const url = req.nextUrl.clone();
     url.pathname = inicio;
     url.search = "";

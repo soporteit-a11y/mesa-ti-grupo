@@ -7,11 +7,13 @@ import { TaskItem } from "@/components/TaskItem";
 type Task = { id: number; done: boolean; title: string };
 
 export function TaskList({
-  initiativeId, tasks, locked = false,
+  initiativeId, tasks, locked = false, readOnly = false,
 }: {
   initiativeId: number; tasks: Task[];
   /** Rol colaborador: solo marcar/desmarcar. Sin reordenar, renombrar ni borrar. */
   locked?: boolean;
+  /** Colaborador sin permiso de edicion: ni siquiera puede marcar. */
+  readOnly?: boolean;
 }) {
   const [items, setItems] = useState<Task[]>(tasks);
   const dragIndex = useRef<number | null>(null);
@@ -51,12 +53,12 @@ export function TaskList({
     persist(next);
   };
 
-  if (locked) {
+  if (locked || readOnly) {
     return (
       <div className="checklist">
         {items.map((t) => (
           <div className="task-drag-row" key={t.id}>
-            <TaskItem id={t.id} done={t.done} title={t.title} locked />
+            <TaskItem id={t.id} done={t.done} title={t.title} locked readOnly={readOnly} />
           </div>
         ))}
       </div>

@@ -9,9 +9,9 @@ export function DeleteInitiativeButton({ id }: { id: number }) {
       <button
         type="submit"
         className="init-del"
-        title="Eliminar ruta"
+        title="Eliminar cronograma"
         onClick={(e) => {
-          if (!confirm("¿Eliminar esta ruta y todas sus tareas?")) e.preventDefault();
+          if (!confirm("¿Eliminar este cronograma y todas sus tareas?")) e.preventDefault();
         }}
       >
         ✕

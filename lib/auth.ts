@@ -1,7 +1,17 @@
 import { randomBytes } from "crypto";
 import { cookies } from "next/headers";
-import { sql } from "./db";
-import { getSession, type SessionUser } from "./session";
+import { sql, ensureSchema } from "./db";
+
+/** Usuario de la sesion, ya con sus permisos (solo del lado Node). */
+export type CurrentUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  approved: boolean;
+  can_edit_schedule: boolean;
+  can_create_tickets: boolean;
+};
 
 const SESSION_COOKIE = "session";
 const SESSION_DAYS = 30;
@@ -27,9 +37,25 @@ export async function clearSessionCookie(): Promise<void> {
   cookies().delete(SESSION_COOKIE);
 }
 
-export async function getCurrentUser(): Promise<SessionUser | null> {
+/**
+ * Resuelve la sesion con permisos incluidos. Hace su propia consulta en vez de
+ * reusar getSession() de lib/session.ts porque aqui si se puede llamar a
+ * ensureSchema() primero — ver el comentario de SessionUser en ese archivo.
+ */
+export async function getCurrentUser(): Promise<CurrentUser | null> {
   const token = cookies().get(SESSION_COOKIE)?.value;
-  return getSession(token);
+  if (!token || !sql) return null;
+  try {
+    await ensureSchema();
+    const rows = await sql`
+      SELECT u.id, u.name, u.email, u.role, u.approved, u.can_edit_schedule, u.can_create_tickets
+      FROM sessions s JOIN users u ON u.id = s.user_id
+      WHERE s.token = ${token} AND s.expires_at > now()`;
+    return (rows[0] as CurrentUser) || null;
+  } catch (e) {
+    console.error("[sesion] getCurrentUser fallo:", e);
+    return null;
+  }
 }
 
 export async function requireAdmin(): Promise<boolean> {

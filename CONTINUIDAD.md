@@ -8,10 +8,14 @@
 >
 > **Última sesión:** 2 de septiembre de 2026
 > **Estado del sistema:** en producción, funcionando, sin incidencias abiertas.
-> **El sistema ya NO es de acceso abierto:** tiene login con roles `admin` / `agent`, bloqueo de
-> rutas por middleware y gestión de cuentas desde `/config`. Antes de tocar cualquier cosa
-> relacionada con permisos, sesiones o el middleware, lee **HANDOFF.md §5.11** — en particular la
-> tabla de qué archivo puede correr en Edge Runtime y cuál no.
+> **El sistema ya NO es de acceso abierto:** tiene login con roles `admin` / `agent`, permisos
+> por cuenta, auto-registro con aprobación, bloqueo de rutas por middleware y gestión de cuentas
+> desde `/config`. Antes de tocar cualquier cosa relacionada con permisos, sesiones o el
+> middleware, lee **HANDOFF.md §5.11** — en particular la tabla de qué archivo puede correr en
+> Edge Runtime y cuál no, y la advertencia de no agregar columnas a `getSession()`.
+>
+> **El módulo "Rutas de trabajo" ahora se llama "Cronogramas"** y vive en `/cronogramas`
+> (`/rutas` quedó como redirección).
 >
 > ### 👉 ¿Buscas qué hay que hacer? Está todo en **§3.bis · TODO LO PENDIENTE**
 > Doce puntos numerados de P0 a P11, ordenados por prioridad. Nada de eso bloquea el
