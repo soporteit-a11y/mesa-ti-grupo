@@ -196,9 +196,9 @@ async function init(q: NonNullable<typeof sql>) {
   // Va aparte del seed y solo con UPDATE, no borra nada: asi se puede aplicar
   // aunque Eddy ya haya marcado avance.
   const fechas = await q`SELECT v FROM meta WHERE k = 'sinco_fechas'`;
-  if (fechas.length === 0) {
+  if (fechas[0]?.v !== "v2") {
     await fecharFasesPendientes(q);
-    await q`INSERT INTO meta (k, v) VALUES ('sinco_fechas', 'v1') ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
+    await q`INSERT INTO meta (k, v) VALUES ('sinco_fechas', 'v2') ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
   }
 
   // Reemplaza los tickets de ejemplo por los tickets reales del CSV (una sola vez).
@@ -422,40 +422,39 @@ async function reimportarSinco(q: NonNullable<typeof sql>, versionPrevia: string
 async function fecharFasesPendientes(q: NonNullable<typeof sql>) {
   const NOTA = "fecha estimada — el Excel dice «Por Definir»";
 
-  // [cronograma, fase, inicio, fin, de que depende]
-  const est: [string, string, string, string, string][] = [
-    ["SINCO 3 · A&F — BD Principal", "Migración de Activos Fijos a Producción",
+  // Se busca por el NOMBRE DE LA FASE, no por el del cronograma: el usuario
+  // renombra los cronogramas ("SINCO 1 · Preparar" -> "ETAPA 1 - SINCO ·
+  // Preparar") y la version anterior de esta funcion comparaba `i.title` con un
+  // titulo fijo, asi que no encontraba nada y no hacia absolutamente nada, en
+  // silencio. El filtro `p.start_date IS NULL` evita pisar fechas ya puestas —
+  // importante porque "Migración de Activos Fijos a Producción" tambien existe,
+  // ya con fecha, en las tres BD secundarias.
+  const est: [string, string, string, string][] = [
+    ["Migración de Activos Fijos a Producción",
      "2027-01-05", "2027-01-12", "tras Activos Fijos en Pruebas (fin 24-dic)"],
-    ["SINCO 3 · A&F — BD Principal", "Capacitaciones Segundo Nivel",
+    ["Capacitaciones Segundo Nivel",
      "2027-01-07", "2027-01-29", "tras Migración de Históricos (10-dic) y Activos Fijos en Pruebas (24-dic)"],
-    ["SINCO 3 · A&F — BD Principal", "Consultoría Final A&F",
+    ["Consultoría Final A&F",
      "2027-02-03", "2027-02-04", "cierre del módulo, antes del fin de HABILITAR (8-feb)"],
-    ["SINCO 8 · ADPRO (Proyectos de obra)", "Capacitaciones y Acompañamientos Segundo Nivel ADPRO",
+    ["Capacitaciones y Acompañamientos Segundo Nivel ADPRO",
      "2026-11-25", "2026-12-18", "tras la Salida a Producción de ADPRO (19-nov)"],
-    ["SINCO 8 · ADPRO (Proyectos de obra)", "Consultoría Final ADPRO",
+    ["Consultoría Final ADPRO",
      "2027-01-21", "2027-01-22", "cierre del módulo ADPRO"],
   ];
 
-  for (const [crono, fase, ini, fin, porque] of est) {
+  for (const [fase, ini, fin, porque] of est) {
     await q`
       UPDATE initiative_phases p
       SET start_date = ${ini}, end_date = ${fin}, context = ${NOTA + " · " + porque}
       FROM initiatives i
-      WHERE p.initiative_id = i.id AND i.title = ${crono} AND p.title = ${fase}
-        AND p.start_date IS NULL`;
+      WHERE p.initiative_id = i.id
+        AND i.company_id = ${cmg} AND i.area = 'SINCO ERP'
+        AND p.title = ${fase} AND p.start_date IS NULL`;
   }
 
-  // Las fechas del cronograma se recalculan a partir de sus fases, si no
-  // quedarian desfasadas respecto a lo que ahora si tiene fecha.
-  await q`
-    UPDATE initiatives i SET
-      start_date = s.ini,
-      due_date = s.fin
-    FROM (
-      SELECT initiative_id, MIN(start_date) AS ini, MAX(end_date) AS fin
-      FROM initiative_phases GROUP BY initiative_id
-    ) s
-    WHERE i.id = s.initiative_id AND i.title LIKE 'SINCO%'`;
+  // Ya no hace falta recalcular initiatives.start_date/due_date: getInitiatives()
+  // deriva el rango de las fases en cada lectura (calcStart/calcEnd), asi que
+  // esas columnas dejaron de usarse para mostrar y no pueden quedarse viejas.
 }
 
 async function seedAdmin(q: NonNullable<typeof sql>) {
