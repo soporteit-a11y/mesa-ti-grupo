@@ -1,19 +1,12 @@
 import type { Initiative } from "@/lib/data";
+import { diaDeFecha, hoyEnDias, fmtDiaMesAnio } from "@/lib/dates";
 
 const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
 
-function dia(d: string): number {
-  const [y, m, dd] = String(d).slice(0, 10).split("-").map(Number);
-  return Math.floor(Date.UTC(y, m - 1, dd) / 86400000);
-}
-
-function hoyDia(): number {
-  return dia(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santo_Domingo" }).format(new Date()));
-}
-
+/** Dias desde epoch -> '15 sep 2026'. */
 function fechaLarga(n: number): string {
   const d = new Date(n * 86400000);
-  return `${d.getUTCDate()} ${MESES[d.getUTCMonth()].toLowerCase()} ${d.getUTCFullYear()}`;
+  return fmtDiaMesAnio(d) ?? "—";
 }
 
 /**
@@ -30,13 +23,18 @@ export function ProjectOverview({
 }: {
   initiatives: Initiative[]; company: string; color: string;
 }) {
-  const hoy = hoyDia();
+  const hoy = hoyEnDias();
 
   const filas = initiatives
     .map((i) => {
-      const fechas = i.phases
-        .filter((p) => p.start_date && p.end_date)
-        .map((p) => [dia(p.start_date!), dia(p.end_date!)] as [number, number]);
+      // Solo fases con AMBAS fechas interpretables. Una fecha ilegible se
+      // descarta en vez de propagar NaN: un NaN aqui tumbaba la pagina entera.
+      const fechas: [number, number][] = [];
+      for (const p of i.phases) {
+        const a = diaDeFecha(p.start_date);
+        const b = diaDeFecha(p.end_date);
+        if (a !== null && b !== null) fechas.push([a, b]);
+      }
       if (fechas.length === 0) return null;
       return {
         id: i.id,

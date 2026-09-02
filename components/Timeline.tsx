@@ -1,26 +1,12 @@
 import type { Initiative, Phase } from "@/lib/data";
+import { diaDeFecha, hoyEnDias, fmtDiaMesAnio } from "@/lib/dates";
 
-const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-
-/** 'YYYY-MM-DD' -> dias desde epoch, como fecha pura (sin horas ni zona). */
-function dia(d: string): number {
-  const [y, m, dd] = String(d).slice(0, 10).split("-").map(Number);
-  return Math.floor(Date.UTC(y, m - 1, dd) / 86400000);
-}
-
-function hoyDia(): number {
-  // El "hoy" del negocio es el de Republica Dominicana, no el del servidor.
-  return dia(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santo_Domingo" }).format(new Date()));
-}
-
-function fecha(d: string): string {
-  const [y, m, dd] = String(d).slice(0, 10).split("-");
-  return `${Number(dd)} ${MESES[Number(m) - 1]} ${String(y).slice(2)}`;
-}
-
-/** Duracion inclusiva: del 1 al 1 es 1 dia, no 0. */
-function duracion(ini: string, fin: string): number {
-  return dia(fin) - dia(ini) + 1;
+/** Duracion inclusiva: del 1 al 1 es 1 dia, no 0. Null si falta alguna fecha. */
+function duracion(ini: unknown, fin: unknown): number | null {
+  const a = diaDeFecha(ini);
+  const b = diaDeFecha(fin);
+  if (a === null || b === null) return null;
+  return b - a + 1;
 }
 
 function fmtDias(n: number): string {
@@ -35,9 +21,9 @@ type Estado = { cls: string; texto: string };
 
 function estadoDe(p: Phase, hoy: number): Estado {
   if (p.total > 0 && p.done === p.total) return { cls: "ok", texto: "Completada" };
-  if (!p.start_date || !p.end_date) return { cls: "sin", texto: "Sin fecha" };
-  const f = dia(p.end_date);
-  const i = dia(p.start_date);
+  const i = diaDeFecha(p.start_date);
+  const f = diaDeFecha(p.end_date);
+  if (i === null || f === null) return { cls: "sin", texto: "Sin fecha" };
   if (f < hoy) return { cls: "crit", texto: "Atrasada" };
   if (i <= hoy && hoy <= f) return { cls: "warn", texto: "En curso" };
   return { cls: "pend", texto: "Pendiente" };
@@ -52,24 +38,32 @@ function estadoDe(p: Phase, hoy: number): Estado {
  * historia de principio a fin y saber en que punto va.
  */
 export function Timeline({ initiative }: { initiative: Initiative }) {
-  const hoy = hoyDia();
+  const hoy = hoyEnDias();
 
-  // Orden cronologico real, no el orden de captura. Las fases sin fecha van al
-  // final: no se pueden ubicar en el tiempo pero tampoco deben desaparecer.
+  // Orden cronologico real, no el orden de captura. Las fases sin fecha (o con
+  // una ilegible) van al final: no se pueden ubicar en el tiempo pero tampoco
+  // deben desaparecer.
   const fases = [...initiative.phases].sort((a, b) => {
-    if (!a.start_date && !b.start_date) return 0;
-    if (!a.start_date) return 1;
-    if (!b.start_date) return -1;
-    return dia(a.start_date) - dia(b.start_date);
+    const x = diaDeFecha(a.start_date);
+    const y = diaDeFecha(b.start_date);
+    if (x === null && y === null) return 0;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return x - y;
   });
 
   if (fases.length === 0) {
     return <p className="pv-meta">Este cronograma todavía no tiene fases.</p>;
   }
 
-  const conFecha = fases.filter((p) => p.start_date && p.end_date);
-  const ini = conFecha.length ? Math.min(...conFecha.map((p) => dia(p.start_date!))) : null;
-  const fin = conFecha.length ? Math.max(...conFecha.map((p) => dia(p.end_date!))) : null;
+  const rangos: [number, number][] = [];
+  for (const p of fases) {
+    const a = diaDeFecha(p.start_date);
+    const b = diaDeFecha(p.end_date);
+    if (a !== null && b !== null) rangos.push([a, b]);
+  }
+  const ini = rangos.length ? Math.min(...rangos.map((r) => r[0])) : null;
+  const fin = rangos.length ? Math.max(...rangos.map((r) => r[1])) : null;
 
   let resumen: React.ReactNode = null;
   if (ini !== null && fin !== null) {
@@ -110,7 +104,9 @@ export function Timeline({ initiative }: { initiative: Initiative }) {
       <ol className="tl-lista">
         {fases.map((p, idx) => {
           const est = estadoDe(p, hoy);
-          const dur = p.start_date && p.end_date ? duracion(p.start_date, p.end_date) : null;
+          const dur = duracion(p.start_date, p.end_date);
+          const fIni = fmtDiaMesAnio(p.start_date);
+          const fFin = fmtDiaMesAnio(p.end_date);
           const cabeceraEtapa = p.stage && p.stage !== etapaPrev ? p.stage : null;
           etapaPrev = p.stage || etapaPrev;
 
@@ -121,10 +117,8 @@ export function Timeline({ initiative }: { initiative: Initiative }) {
               <div className="tl-cuerpo">
                 <div className="tl-linea1">
                   <span className="tl-fechas mono">
-                    {p.start_date && p.end_date
-                      ? p.start_date === p.end_date
-                        ? fecha(p.start_date)
-                        : `${fecha(p.start_date)} → ${fecha(p.end_date)}`
+                    {fIni && fFin
+                      ? fIni === fFin ? fIni : `${fIni} → ${fFin}`
                       : "Sin fecha definida"}
                   </span>
                   {dur !== null && <span className="tl-dur mono">{fmtDias(dur)}</span>}

@@ -14,6 +14,7 @@ import { GanttChart } from "@/components/GanttChart";
 import { Timeline } from "@/components/Timeline";
 import { ProjectOverview } from "@/components/ProjectOverview";
 import { Collapsible, ExpandirTodo } from "@/components/Collapsible";
+import { diaDeFecha, hoyEnDias } from "@/lib/dates";
 import { InitiativeStatusControl } from "@/components/InitiativeStatusControl";
 import { InitiativeTitle } from "@/components/InitiativeTitle";
 import { InitiativeDueDate } from "@/components/InitiativeDueDate";
@@ -22,12 +23,13 @@ import { FiltersCompanyClient } from "@/components/FiltersCompanyClient";
 
 export const dynamic = "force-dynamic";
 
-function dueInfo(dueDate: string | null, status: string) {
+function dueInfo(dueDate: unknown, status: string) {
   if (!dueDate || status === "completado") return null;
-  // due_date es un DATE ('2026-09-15'), no un instante: se parsea con hora local
-  // para no correrlo un dia al convertir zonas (ver §5.8 de HANDOFF.md).
-  const due = new Date(String(dueDate).slice(0, 10) + "T23:59:59");
-  const diffDays = Math.ceil((due.getTime() - Date.now()) / 86400000);
+  // Se compara en dias enteros, no en milisegundos: due_date es un DATE sin
+  // hora y mezclarlo con Date.now() daba resultados que bailaban segun la hora.
+  const fin = diaDeFecha(dueDate);
+  if (fin === null) return null;
+  const diffDays = fin - hoyEnDias();
   if (diffDays < 0) return { cls: "crit", label: `Atrasado ${Math.abs(diffDays)}d` };
   if (diffDays <= 7) return { cls: "warn", label: `Vence en ${diffDays}d` };
   return { cls: "ok", label: `Vence en ${diffDays}d` };

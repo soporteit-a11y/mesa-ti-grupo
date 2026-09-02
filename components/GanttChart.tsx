@@ -1,17 +1,7 @@
 import type { Initiative } from "@/lib/data";
+import { diaDeFecha, hoyEnDias } from "@/lib/dates";
 
 const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
-
-/** 'YYYY-MM-DD' -> dias desde epoch. Se compara como fecha pura, sin horas. */
-function dia(d: string): number {
-  const [y, m, dd] = String(d).slice(0, 10).split("-").map(Number);
-  return Math.floor(Date.UTC(y, m - 1, dd) / 86400000);
-}
-
-function hoyDia(): number {
-  const f = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santo_Domingo" }).format(new Date());
-  return dia(f);
-}
 
 type Barra = {
   key: string;
@@ -38,13 +28,15 @@ export function GanttChart({ initiative }: { initiative: Initiative }) {
   const sinFecha: { key: string; titulo: string }[] = [];
 
   for (const p of initiative.phases) {
-    if (p.start_date && p.end_date) {
+    const a = diaDeFecha(p.start_date);
+    const b = diaDeFecha(p.end_date);
+    if (a !== null && b !== null) {
       conFecha.push({
         key: `p${p.id}`,
         titulo: p.title,
         contexto: p.context,
-        ini: dia(p.start_date),
-        fin: dia(p.end_date),
+        ini: a,
+        fin: b,
         progress: p.progress,
         done: p.done,
         total: p.total,
@@ -67,7 +59,7 @@ export function GanttChart({ initiative }: { initiative: Initiative }) {
   const min = Math.min(...conFecha.map((b) => b.ini));
   const max = Math.max(...conFecha.map((b) => b.fin));
   const span = Math.max(1, max - min);
-  const hoy = hoyDia();
+  const hoy = hoyEnDias();
 
   // Marcas de mes a lo largo del eje
   const marcas: { pos: number; etiqueta: string }[] = [];

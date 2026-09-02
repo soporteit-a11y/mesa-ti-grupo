@@ -4,6 +4,77 @@
 // directamente, que muestra la hora UTC como si fuera local (4 horas adelantada).
 const DR_TZ = "America/Santo_Domingo";
 
+/**
+ * Normaliza una columna DATE a 'YYYY-MM-DD', venga como venga.
+ *
+ * Existe porque el driver puede devolver una columna DATE como texto o como
+ * objeto Date segun el caso, y el codigo que las pintaba asumia siempre texto:
+ * `String(valor).slice(0,10).split("-")` sobre un objeto Date da NaN en
+ * silencio, y ese NaN termino tumbando /cronogramas entero en produccion
+ * (MESES[NaN] -> undefined -> .toLowerCase() explota).
+ *
+ * Una fecha DATE no lleva hora ni zona: NO se convierte a la zona de RD. Si se
+ * hiciera, '2026-09-15' pasaria a ser el 14 por la noche (§5.8).
+ */
+export function toYMD(v: unknown): string | null {
+  if (v == null) return null;
+  if (v instanceof Date) {
+    if (Number.isNaN(v.getTime())) return null;
+    const y = v.getUTCFullYear();
+    const m = String(v.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(v.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  const s = String(v).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  // Ultimo recurso: cualquier otro formato que Date sepa leer.
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : toYMD(d);
+}
+
+/** Dias desde epoch de una fecha DATE, o null si no se pudo interpretar. */
+export function diaDeFecha(v: unknown): number | null {
+  const ymd = toYMD(v);
+  if (!ymd) return null;
+  const [y, m, d] = ymd.split("-").map(Number);
+  const t = Date.UTC(y, m - 1, d);
+  return Number.isNaN(t) ? null : Math.floor(t / 86400000);
+}
+
+/** Hoy, en dias desde epoch, segun la zona de Republica Dominicana. */
+export function hoyEnDias(): number {
+  const f = new Intl.DateTimeFormat("en-CA", { timeZone: DR_TZ }).format(new Date());
+  return diaDeFecha(f)!;
+}
+
+const MES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+/** '2026-09-15' -> '15 sep'. Devuelve null si la fecha no es interpretable. */
+export function fmtDiaMes(v: unknown): string | null {
+  const ymd = toYMD(v);
+  if (!ymd) return null;
+  const [, m, d] = ymd.split("-");
+  return `${Number(d)} ${MES_CORTO[Number(m) - 1]}`;
+}
+
+/** '2026-09-15' -> '15 sep 2026'. */
+export function fmtDiaMesAnio(v: unknown): string | null {
+  const ymd = toYMD(v);
+  if (!ymd) return null;
+  const [y, m, d] = ymd.split("-");
+  return `${Number(d)} ${MES_CORTO[Number(m) - 1]} ${y}`;
+}
+
+/** Rango corto: '26 may – 11 jun'. */
+export function fmtRangoFechas(ini: unknown, fin: unknown): string | null {
+  const a = toYMD(ini);
+  const b = toYMD(fin);
+  if (!a && !b) return null;
+  if (a && b) return a === b ? fmtDiaMes(a) : `${fmtDiaMes(a)} – ${fmtDiaMes(b)}`;
+  return fmtDiaMes(a || b);
+}
+
 function drParts(iso: string) {
   const d = new Date(iso);
   const parts = new Intl.DateTimeFormat("en-US", {

@@ -2,19 +2,11 @@ import { TaskList } from "@/components/TaskList";
 import { AddTaskForm } from "@/components/AddTaskForm";
 import { PhaseHeader } from "@/components/PhaseHeader";
 import { Collapsible } from "@/components/Collapsible";
+import { fmtRangoFechas } from "@/lib/dates";
 import type { Phase } from "@/lib/data";
 
 /** Rango de fechas en formato corto: "26 may – 11 jun". */
-export function fmtRango(ini: string | null, fin: string | null): string | null {
-  const M = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-  const corta = (d: string) => {
-    const [, m, dd] = String(d).slice(0, 10).split("-");
-    return `${Number(dd)} ${M[Number(m) - 1]}`;
-  };
-  if (!ini && !fin) return null;
-  if (ini && fin) return ini === fin ? corta(ini) : `${corta(ini)} – ${corta(fin)}`;
-  return corta((ini || fin)!);
-}
+export { fmtRangoFechas as fmtRango } from "@/lib/dates";
 
 export function PhaseBlock({
   initiativeId, phase, color, canEdit, canCheck, numero,
@@ -29,7 +21,7 @@ export function PhaseBlock({
   /** Puede marcar tareas como completadas. */
   canCheck: boolean;
 }) {
-  const rango = fmtRango(phase.start_date, phase.end_date);
+  const rango = fmtRangoFechas(phase.start_date, phase.end_date);
   const completa = phase.total > 0 && phase.done === phase.total;
 
   const barra = (

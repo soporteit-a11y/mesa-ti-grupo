@@ -3,24 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { reorderTasks } from "@/app/actions";
 import { TaskItem } from "@/components/TaskItem";
+import { fmtDiaMes } from "@/lib/dates";
 
 type Task = {
   id: number; done: boolean; title: string;
   context?: string | null; start_date?: string | null; end_date?: string | null;
 };
 
-const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
-
-/**
- * Fecha corta de la tarea. Se formatea desde el texto 'YYYY-MM-DD' tal cual:
- * es una columna DATE sin hora, y convertirla a una zona horaria la correria
- * un dia hacia atras (ver §5.8 de HANDOFF.md).
- */
+/** Fecha corta de la tarea (la de fin, o la de inicio si no hay fin). */
 function fechaCorta(t: Task): string | null {
-  const d = t.end_date || t.start_date;
-  if (!d) return null;
-  const [, m, dd] = String(d).slice(0, 10).split("-");
-  return `${Number(dd)} ${MESES[Number(m) - 1]}`;
+  return fmtDiaMes(t.end_date || t.start_date);
 }
 
 export function TaskList({
