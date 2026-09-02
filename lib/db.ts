@@ -1,5 +1,6 @@
 import { hashPassword } from "./password";
 import { sql, hasDb } from "./sql";
+import { SINCO_CRONOGRAMAS } from "./sinco-seed";
 
 // La conexion vive en lib/sql.ts para que el middleware (Edge Runtime) pueda
 // usarla sin arrastrar este archivo, que importa `crypto` de Node. Se
@@ -38,11 +39,30 @@ async function init(q: NonNullable<typeof sql>) {
     due_date DATE,
     created_at TIMESTAMPTZ DEFAULT now()
   )`;
+  // Fases de un cronograma. Es el nivel intermedio entre la iniciativa y sus
+  // tareas: cada fase tiene su propio rango de fechas y su propio avance.
+  // `stage` guarda la etapa macro de origen (PREPARAR / HABILITAR / ...) para
+  // poder agrupar sin perder el contexto del cronograma original.
+  await q`CREATE TABLE IF NOT EXISTS initiative_phases (
+    id SERIAL PRIMARY KEY,
+    initiative_id INT REFERENCES initiatives(id) ON DELETE CASCADE,
+    title TEXT NOT NULL, stage TEXT, context TEXT,
+    start_date DATE, end_date DATE,
+    position INT NOT NULL DEFAULT 0
+  )`;
   await q`CREATE TABLE IF NOT EXISTS initiative_tasks (
     id SERIAL PRIMARY KEY,
     initiative_id INT REFERENCES initiatives(id) ON DELETE CASCADE,
     title TEXT NOT NULL, done BOOLEAN NOT NULL DEFAULT false, position INT NOT NULL DEFAULT 0
   )`;
+  // phase_id nullable a proposito: las iniciativas que no usan fases (las de
+  // Droppett/Shazam/Gilligan) siguen funcionando igual que antes, con sus
+  // tareas colgando directo del cronograma.
+  await q`ALTER TABLE initiative_tasks ADD COLUMN IF NOT EXISTS phase_id INT REFERENCES initiative_phases(id) ON DELETE SET NULL`;
+  await q`ALTER TABLE initiative_tasks ADD COLUMN IF NOT EXISTS start_date DATE`;
+  await q`ALTER TABLE initiative_tasks ADD COLUMN IF NOT EXISTS end_date DATE`;
+  await q`ALTER TABLE initiative_tasks ADD COLUMN IF NOT EXISTS owner TEXT`;
+  await q`ALTER TABLE initiatives ADD COLUMN IF NOT EXISTS start_date DATE`;
   await q`CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)`;
   await q`CREATE TABLE IF NOT EXISTS collaborators (
     id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, company_id INT REFERENCES companies(id),
@@ -156,6 +176,15 @@ async function init(q: NonNullable<typeof sql>) {
       await q`UPDATE categories SET sla_hours = ${h} WHERE name = ${name}`;
     }
     await q`INSERT INTO meta (k, v) VALUES ('category_sla_v1', '1') ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
+  }
+
+  // Importa el cronograma real de SINCO ERP (CMG) desde lib/sinco-seed.ts, una
+  // sola vez. Si el usuario luego borra o edita esos cronogramas, no se vuelven
+  // a crear: la clave en `meta` ya quedo puesta.
+  const sinco = await q`SELECT v FROM meta WHERE k = 'sinco_seed'`;
+  if (sinco.length === 0) {
+    await seedSinco(q);
+    await q`INSERT INTO meta (k, v) VALUES ('sinco_seed', 'v1') ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
   }
 
   // Reemplaza los tickets de ejemplo por los tickets reales del CSV (una sola vez).
@@ -293,6 +322,50 @@ async function seedRealTickets(q: NonNullable<typeof sql>) {
   for (const [title, company, category, priority, created, closed] of rows) {
     await q`INSERT INTO tickets (title, description, company_id, category, priority, status, created_at, updated_at, resolved_at)
       VALUES (${title}, ${""}, ${cId(company)}, ${category}, ${priority}, 'resuelto', ${created}, ${closed}, ${closed})`;
+  }
+}
+
+/**
+ * Crea los cronogramas de la implementacion de SINCO ERP en CMG a partir del
+ * Excel del proveedor (ver lib/sinco-seed.ts y HANDOFF.md §5.12).
+ *
+ * Ninguna tarea se marca como completada: el Excel solo trae fechas, no lleva
+ * columna de avance, asi que dar por hecho lo que ya paso seria inventarse un
+ * progreso que no consta en ningun lado. Eddy va marcando lo que de verdad se hizo.
+ */
+async function seedSinco(q: NonNullable<typeof sql>) {
+  const cs = await q`SELECT id, name FROM companies WHERE name = 'CMG'`;
+  const cmg = cs[0]?.id;
+  if (!cmg) return;
+
+  let posCrono = 0;
+  for (const c of SINCO_CRONOGRAMAS) {
+    // Si ya existe un cronograma con ese titulo no se duplica (por si esta
+    // funcion llegara a correr dos veces por una carrera entre instancias).
+    const dup = await q`SELECT id FROM initiatives WHERE company_id = ${cmg} AND title = ${c.titulo}`;
+    if (dup.length > 0) continue;
+
+    const ini = await q`INSERT INTO initiatives (company_id, title, area, status, owner, start_date, due_date)
+      VALUES (${cmg}, ${c.titulo}, 'SINCO ERP', 'en_curso', 'SINCOSOFT - MESSINA', ${c.inicio}, ${c.fin})
+      RETURNING id`;
+    const iniId = ini[0].id;
+
+    let posFase = 0;
+    let posTarea = 0;
+    for (const f of c.fases) {
+      const ph = await q`INSERT INTO initiative_phases (initiative_id, title, stage, context, start_date, end_date, position)
+        VALUES (${iniId}, ${f.titulo}, ${c.etapa}, ${f.contexto || null}, ${f.inicio}, ${f.fin}, ${posFase})
+        RETURNING id`;
+      const faseId = ph[0].id;
+      posFase++;
+
+      for (const t of f.tareas) {
+        await q`INSERT INTO initiative_tasks (initiative_id, phase_id, title, done, position, start_date, end_date, owner)
+          VALUES (${iniId}, ${faseId}, ${t.t}, false, ${posTarea}, ${t.ini}, ${t.fin}, ${t.resp || null})`;
+        posTarea++;
+      }
+    }
+    posCrono++;
   }
 }
 

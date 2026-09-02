@@ -479,9 +479,12 @@ export async function addTask(formData: FormData) {
   if (!(await requireAdmin())) return;
   const initiative_id = Number(formData.get("initiative_id"));
   const title = String(formData.get("title") || "").trim();
+  const phaseRaw = String(formData.get("phase_id") || "");
+  const phase_id = phaseRaw ? Number(phaseRaw) : null;
   if (!initiative_id || !title) return;
   const pos = await sql!`SELECT COALESCE(MAX(position), -1) + 1 AS p FROM initiative_tasks WHERE initiative_id = ${initiative_id}`;
-  await sql!`INSERT INTO initiative_tasks (initiative_id, title, position) VALUES (${initiative_id}, ${title}, ${pos[0].p})`;
+  await sql!`INSERT INTO initiative_tasks (initiative_id, phase_id, title, position)
+    VALUES (${initiative_id}, ${phase_id}, ${title}, ${pos[0].p})`;
   revalidatePath("/cronogramas");
 }
 
@@ -545,6 +548,57 @@ export async function deleteInitiative(formData: FormData) {
   await sql!`DELETE FROM initiatives WHERE id = ${id}`;
   revalidatePath("/cronogramas");
   revalidatePath("/");
+}
+
+/* ---------- Fases de un cronograma ---------- */
+export async function createPhase(formData: FormData) {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+  const initiative_id = Number(formData.get("initiative_id"));
+  const title = String(formData.get("title") || "").trim();
+  if (!initiative_id || !title) return;
+  const pos = await sql!`SELECT COALESCE(MAX(position), -1) + 1 AS p FROM initiative_phases WHERE initiative_id = ${initiative_id}`;
+  await sql!`INSERT INTO initiative_phases (initiative_id, title, position) VALUES (${initiative_id}, ${title}, ${pos[0].p})`;
+  revalidatePath("/cronogramas");
+}
+
+export async function updatePhase(formData: FormData) {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+  const id = Number(formData.get("id"));
+  const title = String(formData.get("title") || "").trim();
+  const start_date = String(formData.get("start_date") || "") || null;
+  const end_date = String(formData.get("end_date") || "") || null;
+  if (!id || !title) return;
+  await sql!`UPDATE initiative_phases SET title = ${title}, start_date = ${start_date}, end_date = ${end_date} WHERE id = ${id}`;
+  revalidatePath("/cronogramas");
+}
+
+/**
+ * Borra la fase pero NO sus tareas: quedan con phase_id NULL (ON DELETE SET
+ * NULL) y se siguen viendo en el bloque "Sin fase". Borrar trabajo real solo
+ * por reorganizar el cronograma seria destructivo y dificil de deshacer.
+ */
+export async function deletePhase(formData: FormData) {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+  const id = Number(formData.get("id"));
+  if (!id) return;
+  await sql!`DELETE FROM initiative_phases WHERE id = ${id}`;
+  revalidatePath("/cronogramas");
+  revalidatePath("/");
+}
+
+/** Mueve una tarea a otra fase, o la deja sin fase si phase_id viene vacio. */
+export async function updateTaskPhase(formData: FormData) {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+  const id = Number(formData.get("id"));
+  const raw = String(formData.get("phase_id") || "");
+  const phase_id = raw ? Number(raw) : null;
+  if (!id) return;
+  await sql!`UPDATE initiative_tasks SET phase_id = ${phase_id} WHERE id = ${id}`;
+  revalidatePath("/cronogramas");
 }
 
 export async function reorderTasks(formData: FormData) {

@@ -461,6 +461,60 @@ crear la sesión, de modo que una cuenta pendiente sencillamente no existe para 
 sistema — por eso el middleware no necesita saber nada de aprobaciones. El auto-registro completo
 se puede apagar desde `/config` (clave `registro_abierto` en `meta`).
 
+### 5.12 Fases, fechas y el cronograma de SINCO ERP (agregado 2026-09-02)
+
+**El modelo.** Un cronograma (`initiatives`) tiene **fases** (`initiative_phases`), y cada fase
+agrupa **tareas** (`initiative_tasks.phase_id`). `phase_id` es nullable a propósito: los
+cronogramas que no usan fases —los de Droppett, Shazam y Gilligan— siguen funcionando como
+siempre, con sus tareas colgando directo del cronograma. La página los renderiza igual que antes,
+sin cabeceras de fase. Cada fase tiene su propio `start_date`/`end_date` y calcula su avance por
+separado; el avance del cronograma sigue siendo el agregado de **todas** sus tareas.
+
+`deletePhase` borra la fase pero **no** sus tareas (`ON DELETE SET NULL`): quedan agrupadas bajo
+"Sin fase". Borrar trabajo real solo por reorganizar la estructura sería destructivo y difícil de
+deshacer.
+
+**De dónde salió el cronograma de CMG.** El proveedor (SINCOSOFT) entregó
+`MESSINA - IMPLEMENTACIÓN SINCO ERP.xlsx`: una exportación tipo MS Project de **330 filas y 6
+niveles de jerarquía**, del 26/05/2026 al 11/02/2027. Dos cosas no obvias de ese archivo:
+
+1. **La jerarquía no está en columnas ni en la indentación de las celdas.** Está codificada en
+   los **espacios iniciales del propio texto** del nombre de tarea (0, 3, 6, 9… espacios, con
+   desviaciones de ±1). Por eso al abrirlo se ve plano. El nivel se calcula como
+   `round(espacios / 3)`.
+2. **No hay ninguna columna de avance ni de "% completado".** Solo fechas.
+
+**Cómo se colapsaron 6 niveles a 2.** La regla: *una fase es el nodo-grupo más profundo, es decir,
+el que tiene hijos y cuyos hijos son todos hojas*. Sus hojas son las tareas. Eso da 55 fases
+naturales sin perder ninguna fila. Las hojas sueltas que no caían bajo ninguna fase se agruparon
+en una fase "Otras actividades" de su rama (6 fases más, 61 en total).
+
+**Por qué 9 cronogramas y no uno.** Un solo cronograma habría dado una tarjeta con 55 fases,
+ilegible, y con títulos repetidos: "Migración de Activos Fijos a Producción" aparece cuatro
+veces, una por base de datos. Se dividió por frente de trabajo real —decisión confirmada con el
+usuario—: Preparar, Capacitaciones de gestión, A&F (BD Principal + 3 secundarias), Facturación
+electrónica, ADPRO, y Seguimiento y cierre. La etapa macro del Excel (PREPARAR / HABILITAR /
+SEGUIMIENTO / CIERRE) se conserva en `initiative_phases.stage`, y la ruta jerárquica intermedia
+en `context`, para no perder de dónde salió cada fase.
+
+**Ninguna tarea se importó marcada como completada.** El Excel no dice qué se hizo, solo cuándo
+estaba planificado. Dar por hecho lo que ya pasó habría inventado un avance que no consta en
+ninguna parte — se le preguntó al usuario y confirmó dejarlo todo sin marcar. **Si vuelves a
+importar algo así, no asumas que "fecha pasada" significa "hecho".**
+
+**5 fases quedaron sin fecha** porque en el Excel dicen "Por Definir". El Gantt no las dibuja
+(no se puede ubicar en una línea de tiempo lo que no tiene fecha) y las lista aparte debajo.
+
+**El archivo generado.** `lib/sinco-seed.ts` (~49 KB) lo produjo un script a partir del Excel; no
+se edita a mano. Se importa una sola vez con la clave `sinco_seed` en `meta`, mismo patrón que
+`tickets_seed` (§5.5). Si Eddy luego borra o reorganiza esos cronogramas, **no se vuelven a
+crear**: la clave ya quedó puesta.
+
+**El Gantt** (`components/GanttChart.tsx`) está hecho a mano con posicionamiento porcentual, sin
+librerías, igual que las donas y barras del dashboard. Dibuja una barra por fase, con relleno
+proporcional al avance, marca del día de hoy (calculado en zona de RD, §5.8) y borde rojo en las
+fases cuya fecha de fin ya pasó y siguen incompletas.
+
 ---
 
 ## 6. Modelo de datos
@@ -998,6 +1052,32 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 2 de septiembre de 2026 (tanda 4) — Fases con fechas, vista Gantt e importación del cronograma de SINCO
+
+El usuario subió el Excel del proveedor (`MESSINA - IMPLEMENTACIÓN SINCO ERP.xlsx`) para
+convertirlo en cronogramas estructurados dentro del sistema. Ver §5.12 para el análisis completo
+del archivo y las decisiones de mapeo.
+
+- `lib/db.ts`: nueva tabla `initiative_phases` (`initiative_id, title, stage, context,
+  start_date, end_date, position`). `initiative_tasks` gana `phase_id` (nullable, `ON DELETE SET
+  NULL`), `start_date`, `end_date` y `owner`. `initiatives` gana `start_date`.
+- `lib/sinco-seed.ts` (nuevo, generado, ~49 KB): los 9 cronogramas / 61 fases / 249 tareas
+  extraídos del Excel. Se importan una sola vez vía la clave `sinco_seed` en `meta`, con el mismo
+  patrón que `tickets_seed`. **Ninguna tarea se marca como completada** — ver §5.12.
+- `lib/data.ts`: `getInitiatives()` ahora devuelve `phases` (con avance propio por fase),
+  `looseTasks` (tareas sin fase) y `tasks`. Sigue siendo el mismo patrón de consultas planas
+  unidas en JS, ahora con tres consultas en vez de dos.
+- Acciones nuevas: `createPhase`, `updatePhase`, `deletePhase`, `updateTaskPhase`. `addTask`
+  acepta `phase_id`. `deletePhase` **no borra las tareas**: quedan sin fase.
+- Componentes nuevos: `PhaseBlock` (bloque de fase con avance y fechas), `PhaseHeader` (editor
+  desplegable de título/fechas, admin), `AddPhaseForm`, `GanttChart`.
+- `app/cronogramas/page.tsx`: dos vistas conmutables por `?vista=gantt` — **Lista** (fases con su
+  checklist) y **Gantt** (barras por fase sobre una línea de tiempo, con marca del día de hoy y
+  las fases vencidas en rojo). El Gantt está hecho a mano con posicionamiento porcentual, sin
+  librerías, igual que el resto de los gráficos del proyecto.
+- Compatibilidad hacia atrás: un cronograma sin fases (los de Droppett/Shazam/Gilligan) se sigue
+  viendo exactamente igual que antes — lista plana de tareas, sin cabeceras de fase.
 
 ### 2 de septiembre de 2026 (tanda 3) — "Cronogramas", permisos granulares y auto-registro
 

@@ -258,40 +258,77 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
 }
 
 /* ---------- Cronogramas (modulo aparte; antes "Rutas de trabajo") ---------- */
+export type Task = {
+  id: number; title: string; done: boolean;
+  phase_id: number | null;
+  start_date: string | null; end_date: string | null; owner: string | null;
+};
+
+export type Phase = {
+  id: number; title: string; stage: string | null; context: string | null;
+  start_date: string | null; end_date: string | null;
+  tasks: Task[];
+  total: number; done: number; progress: number;
+};
+
 export type Initiative = {
   id: number;
   title: string;
   area: string;
   status: string;
   owner: string | null;
+  start_date: string | null;
   due_date: string | null;
   company_id: number;
   company: string;
   company_color: string;
-  tasks: { id: number; title: string; done: boolean }[];
+  /** Todas las tareas del cronograma, con fase o sin ella. */
+  tasks: Task[];
+  /** Fases ordenadas. Vacio en cronogramas que no usan fases. */
+  phases: Phase[];
+  /** Tareas que no pertenecen a ninguna fase (modelo antiguo, plano). */
+  looseTasks: Task[];
   total: number;
   done: number;
   progress: number;
 };
 
+function avance(tasks: Task[]) {
+  const done = tasks.filter((t) => t.done).length;
+  return { total: tasks.length, done, progress: tasks.length ? Math.round((done / tasks.length) * 100) : 0 };
+}
+
 export async function getInitiatives(): Promise<Initiative[]> {
   await ensureSchema();
   const q = sql!;
+  // Tres consultas planas que se unen en JS, igual que antes: es mas simple de
+  // leer que un JSON agregado en SQL y el volumen aqui es pequeno.
   const inits = await q`
-    SELECT i.id, i.title, i.area, i.status, i.owner, i.due_date, i.company_id,
+    SELECT i.id, i.title, i.area, i.status, i.owner, i.start_date, i.due_date, i.company_id,
            c.name AS company, c.color AS company_color
     FROM initiatives i JOIN companies c ON c.id = i.company_id
     ORDER BY c.name, i.id`;
-  const tasks = await q`SELECT id, initiative_id, title, done FROM initiative_tasks ORDER BY position, id`;
+  const phases = await q`
+    SELECT id, initiative_id, title, stage, context, start_date, end_date
+    FROM initiative_phases ORDER BY position, id`;
+  const tasks = await q`
+    SELECT id, initiative_id, phase_id, title, done, start_date, end_date, owner
+    FROM initiative_tasks ORDER BY position, id`;
+
   return (inits as any[]).map((i) => {
-    const t = (tasks as any[]).filter((x) => x.initiative_id === i.id);
-    const done = t.filter((x) => x.done).length;
+    const t = (tasks as any[]).filter((x) => x.initiative_id === i.id) as Task[];
+    const ph = (phases as any[])
+      .filter((p) => p.initiative_id === i.id)
+      .map((p) => {
+        const pt = t.filter((x) => x.phase_id === p.id);
+        return { ...p, tasks: pt, ...avance(pt) } as Phase;
+      });
     return {
       ...i,
-      tasks: t.map((x) => ({ id: x.id, title: x.title, done: x.done })),
-      total: t.length,
-      done,
-      progress: t.length ? Math.round((done / t.length) * 100) : 0,
+      tasks: t,
+      phases: ph,
+      looseTasks: t.filter((x) => x.phase_id == null),
+      ...avance(t),
     } as Initiative;
   });
 }

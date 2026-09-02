@@ -15,7 +15,10 @@
 > Edge Runtime y cuál no, y la advertencia de no agregar columnas a `getSession()`.
 >
 > **El módulo "Rutas de trabajo" ahora se llama "Cronogramas"** y vive en `/cronogramas`
-> (`/rutas` quedó como redirección).
+> (`/rutas` quedó como redirección). Ahora tiene **fases con fechas de inicio/fin y una vista
+> Gantt**, y trae importado el cronograma real de la implementación de SINCO ERP en CMG
+> (9 cronogramas, 61 fases, 249 tareas, tomados del Excel del proveedor). Ver HANDOFF.md §5.12
+> antes de tocar nada de eso — en particular por qué ninguna tarea se importó marcada como hecha.
 >
 > ### 👉 ¿Buscas qué hay que hacer? Está todo en **§3.bis · TODO LO PENDIENTE**
 > Doce puntos numerados de P0 a P11, ordenados por prioridad. Nada de eso bloquea el
