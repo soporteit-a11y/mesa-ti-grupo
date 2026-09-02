@@ -4,9 +4,13 @@ import { useRef, useState } from "react";
 import { toggleTask, updateTaskTitle, deleteTask } from "@/app/actions";
 
 export function TaskItem({
-  id, done, title, locked = false, readOnly = false,
+  id, done, title, locked = false, readOnly = false, context, fecha,
 }: {
   id: number; done: boolean; title: string;
+  /** Sub-grupo del Excel del que venia la tarea. Solo informativo. */
+  context?: string | null;
+  /** Fecha planificada, ya formateada. */
+  fecha?: string | null;
   /**
    * Rol colaborador: puede marcar la tarea como hecha, pero no renombrarla ni
    * eliminarla. Por defecto false, asi la vista del admin no cambia.
@@ -37,7 +41,10 @@ export function TaskItem({
       )}
 
       {locked ? (
-        <span className="task-title-static">{title}</span>
+        <span className="task-title-static">
+          {context ? <span className="task-ctx">{context}</span> : null}
+          {title}
+        </span>
       ) : (
       <form ref={titleRef} action={updateTaskTitle} className="task-title-form">
         <input type="hidden" name="id" value={id} />
@@ -58,6 +65,8 @@ export function TaskItem({
         />
       </form>
       )}
+
+      {fecha ? <span className="task-fecha mono">{fecha}</span> : null}
 
       {!locked && (
         <form ref={deleteRef} action={deleteTask}>

@@ -484,18 +484,42 @@ niveles de jerarquía**, del 26/05/2026 al 11/02/2027. Dos cosas no obvias de es
    `round(espacios / 3)`.
 2. **No hay ninguna columna de avance ni de "% completado".** Solo fechas.
 
-**Cómo se colapsaron 6 niveles a 2.** La regla: *una fase es el nodo-grupo más profundo, es decir,
-el que tiene hijos y cuyos hijos son todos hojas*. Sus hojas son las tareas. Eso da 55 fases
-naturales sin perder ninguna fila. Las hojas sueltas que no caían bajo ninguna fase se agruparon
-en una fase "Otras actividades" de su rama (6 fases más, 61 en total).
+**Cómo se colapsaron 6 niveles a 2 — y por qué el primer intento no servía.**
 
-**Por qué 9 cronogramas y no uno.** Un solo cronograma habría dado una tarjeta con 55 fases,
-ilegible, y con títulos repetidos: "Migración de Activos Fijos a Producción" aparece cuatro
-veces, una por base de datos. Se dividió por frente de trabajo real —decisión confirmada con el
-usuario—: Preparar, Capacitaciones de gestión, A&F (BD Principal + 3 secundarias), Facturación
-electrónica, ADPRO, y Seguimiento y cierre. La etapa macro del Excel (PREPARAR / HABILITAR /
-SEGUIMIENTO / CIERRE) se conserva en `initiative_phases.stage`, y la ruta jerárquica intermedia
-en `context`, para no perder de dónde salió cada fase.
+La **v1** usaba la regla "una fase es el nodo-grupo más profundo". Técnicamente no perdía datos,
+pero el resultado era **incomprensible para el usuario**, que lo dijo al verlo: partía secciones
+que en el Excel van juntas. "Parametrización Ambiente de Producción" se rompía en tres fases
+sueltas y hermanas —"Migración/Actualización Maestros", "Parametrizaciones Generales", "Migración
+Saldos CXP y CXC"— sin nada que indicara que pertenecen a la misma sección. Además el `context`
+de cada fase era la ruta completa, larguísima y repetida.
+
+La **v2** (la que está en producción) usa una regla mucho más simple y fiel al documento original:
+
+- El **cronograma** es un nodo "contenedor" elegido a mano: los frentes de trabajo reales.
+- Las **fases** son los **hijos directos** de ese contenedor. Es la sección tal cual la escribió
+  el proveedor, sin partirla ni recombinarla.
+- Las **tareas** son todas las hojas que cuelgan de la fase, aplanadas. Si una hoja venía de un
+  sub-grupo intermedio, ese nombre se guarda en `initiative_tasks.context` y se muestra como una
+  etiqueta pequeña — no se mete en el título, que ya de por sí es largo.
+- Los hijos directos que son **hoja** (actas, firmas, aprobaciones: entregables de un solo día)
+  se agrupan en una fase **"Hitos y entregables"**, porque eso es exactamente lo que son.
+- Las fases se ordenan **cronológicamente**, no por orden de captura: así el cronograma se lee de
+  principio a fin.
+
+Resultado: **10 cronogramas, 47 fases, 249 tareas** (frente a 61 fases en la v1), y ninguna fila
+del Excel perdida — el generador tiene un `assert` que lo comprueba, más una red de seguridad que
+adjunta al cronograma más cercano cualquier hoja que no caiga en ningún contenedor.
+
+**Los cronogramas van numerados** ("SINCO 1 · Preparar", "SINCO 2 · …") para que el orden del
+proyecto sea evidente en la lista, que es lo que se perdía cuando eran solo nombres.
+
+La etapa macro del Excel (PREPARAR / HABILITAR / SEGUIMIENTO / CIERRE) se conserva en
+`initiative_phases.stage` y se usa para agrupar en la vista de línea de tiempo.
+
+**Si vuelves a cambiar la estructura del seed**, sube la versión de la clave `sinco_seed` en
+`meta`. `reimportarSinco()` borra y recrea los cronogramas `SINCO%` de CMG **solo si nadie ha
+marcado ninguna tarea**; si ya hay avance real registrado, no toca nada y lo avisa por consola,
+porque borrar el trabajo del usuario para reorganizar sería destructivo.
 
 **Ninguna tarea se importó marcada como completada.** El Excel no dice qué se hizo, solo cuándo
 estaba planificado. Dar por hecho lo que ya pasó habría inventado un avance que no consta en
@@ -510,7 +534,7 @@ se edita a mano. Se importa una sola vez con la clave `sinco_seed` en `meta`, mi
 `tickets_seed` (§5.5). Si Eddy luego borra o reorganiza esos cronogramas, **no se vuelven a
 crear**: la clave ya quedó puesta.
 
-**Todo se pliega** (`components/Collapsible.tsx`). Con 9 cronogramas, 61 fases y 249 tareas, la
+**Todo se pliega** (`components/Collapsible.tsx`). Con 10 cronogramas, 47 fases y 249 tareas, la
 página abierta de golpe es inmanejable — el usuario lo reportó nada más verla. Cronogramas y fases
 son bloques plegables; plegado, cada uno sigue mostrando su barra de avance, así que la vista
 comprimida sigue diciendo lo importante. Los cronogramas **con fases arrancan plegados** y los
@@ -1089,6 +1113,28 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
+### 2 de septiembre de 2026 (tanda 5) — Reestructurar las fases de SINCO (la v1 era incomprensible)
+
+El usuario vio el resultado de la tanda 4 y dijo, literalmente, que no entendía la organización ni
+la estructura. Tenía razón, y el motivo está explicado en §5.12: la regla de "el nodo más profundo"
+partía secciones que en el Excel van juntas. Se rehízo el mapeo entero.
+
+- `lib/sinco-seed.ts` regenerado con la regla v2: **fase = hijo directo del contenedor**, tareas =
+  hojas aplanadas, hitos de un día agrupados en "Hitos y entregables", fases ordenadas
+  cronológicamente. Pasa de 61 fases confusas a **47 legibles**, con las 249 tareas intactas.
+- Los cronogramas ahora van **numerados** ("SINCO 1 · Preparar" … "SINCO 10 · Cierre") para que el
+  orden del proyecto se vea en la lista.
+- `initiative_tasks.context` (columna nueva): el sub-grupo del Excel del que venía la tarea, cuando
+  la fase lo absorbió. Se muestra como etiqueta pequeña, no dentro del título.
+- Cada tarea muestra además su **fecha planificada** al final de la fila.
+- `reimportarSinco()` sustituye a `seedSinco()`: al subir la versión de la clave `sinco_seed`
+  borra y recrea, **pero solo si nadie marcó ninguna tarea**. Si ya hay avance real, no toca nada
+  y lo avisa por consola — reorganizar no justifica destruir trabajo del usuario.
+- Dos fallos del generador corregidos: `buscar("CIERRE")` encontraba antes "Capacitación Cierre
+  anual y de terceros" (ahora prioriza coincidencia exacta), y 4 hojas quedaban sin asignar (ahora
+  hay una red de seguridad que las adjunta al cronograma más cercano, más un `assert` que falla si
+  se pierde alguna).
+
 ### 2 de septiembre de 2026 (tanda 4) — Fases con fechas, vista Gantt e importación del cronograma de SINCO
 
 El usuario subió el Excel del proveedor (`MESSINA - IMPLEMENTACIÓN SINCO ERP.xlsx`) para
@@ -1098,7 +1144,7 @@ del archivo y las decisiones de mapeo.
 - `lib/db.ts`: nueva tabla `initiative_phases` (`initiative_id, title, stage, context,
   start_date, end_date, position`). `initiative_tasks` gana `phase_id` (nullable, `ON DELETE SET
   NULL`), `start_date`, `end_date` y `owner`. `initiatives` gana `start_date`.
-- `lib/sinco-seed.ts` (nuevo, generado, ~49 KB): los 9 cronogramas / 61 fases / 249 tareas
+- `lib/sinco-seed.ts` (nuevo, generado, ~49 KB): los 10 cronogramas / 47 fases / 249 tareas
   extraídos del Excel. Se importan una sola vez vía la clave `sinco_seed` en `meta`, con el mismo
   patrón que `tickets_seed`. **Ninguna tarea se marca como completada** — ver §5.12.
 - `lib/data.ts`: `getInitiatives()` ahora devuelve `phases` (con avance propio por fase),

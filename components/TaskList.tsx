@@ -4,7 +4,24 @@ import { useEffect, useRef, useState } from "react";
 import { reorderTasks } from "@/app/actions";
 import { TaskItem } from "@/components/TaskItem";
 
-type Task = { id: number; done: boolean; title: string };
+type Task = {
+  id: number; done: boolean; title: string;
+  context?: string | null; start_date?: string | null; end_date?: string | null;
+};
+
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+/**
+ * Fecha corta de la tarea. Se formatea desde el texto 'YYYY-MM-DD' tal cual:
+ * es una columna DATE sin hora, y convertirla a una zona horaria la correria
+ * un dia hacia atras (ver §5.8 de HANDOFF.md).
+ */
+function fechaCorta(t: Task): string | null {
+  const d = t.end_date || t.start_date;
+  if (!d) return null;
+  const [, m, dd] = String(d).slice(0, 10).split("-");
+  return `${Number(dd)} ${MESES[Number(m) - 1]}`;
+}
 
 export function TaskList({
   initiativeId, tasks, locked = false, readOnly = false,
@@ -58,7 +75,15 @@ export function TaskList({
       <div className="checklist">
         {items.map((t) => (
           <div className="task-drag-row" key={t.id}>
-            <TaskItem id={t.id} done={t.done} title={t.title} locked readOnly={readOnly} />
+            <TaskItem
+              id={t.id}
+              done={t.done}
+              title={t.title}
+              context={t.context}
+              fecha={fechaCorta(t)}
+              locked
+              readOnly={readOnly}
+            />
           </div>
         ))}
       </div>
@@ -89,7 +114,7 @@ export function TaskList({
             <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Subir tarea">▲</button>
             <button type="button" onClick={() => move(i, 1)} disabled={i === items.length - 1} aria-label="Bajar tarea">▼</button>
           </div>
-          <TaskItem id={t.id} done={t.done} title={t.title} />
+          <TaskItem id={t.id} done={t.done} title={t.title} context={t.context} fecha={fechaCorta(t)} />
         </div>
       ))}
     </div>

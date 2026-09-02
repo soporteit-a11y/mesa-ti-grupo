@@ -261,7 +261,8 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
 export type Task = {
   id: number; title: string; done: boolean;
   phase_id: number | null;
-  start_date: string | null; end_date: string | null; owner: string | null;
+  start_date: string | null; end_date: string | null;
+  owner: string | null; context: string | null;
 };
 
 export type Phase = {
@@ -312,7 +313,7 @@ export async function getInitiatives(): Promise<Initiative[]> {
     SELECT id, initiative_id, title, stage, context, start_date, end_date
     FROM initiative_phases ORDER BY position, id`;
   const tasks = await q`
-    SELECT id, initiative_id, phase_id, title, done, start_date, end_date, owner
+    SELECT id, initiative_id, phase_id, title, done, start_date, end_date, owner, context
     FROM initiative_tasks ORDER BY position, id`;
 
   return (inits as any[]).map((i) => {

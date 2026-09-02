@@ -707,6 +707,14 @@ dialog::backdrop { background: rgba(3,6,10,.65); backdrop-filter: blur(2px); }
 /* Version no editable del titulo (rol colaborador): mismas medidas que el input
    para que la lista no cambie de altura ni de alineacion segun el rol. */
 .task-title-static { flex: 1; min-width: 0; padding: 4px 6px; font-size: 13.5px; color: var(--ink-soft); border: 1px solid transparent; }
+/* Sub-grupo del Excel del que venia la tarea */
+.task-ctx {
+  display: inline-block; margin-right: 6px; font-family: var(--font-mono); font-size: 9.5px;
+  letter-spacing: .03em; color: var(--muted); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; vertical-align: 1px;
+}
+.task-fecha { font-size: 10.5px; color: var(--faint); flex-shrink: 0; white-space: nowrap; padding-left: 4px; }
+.task-item.done .task-fecha { color: var(--line-strong); }
 .task-item.done .task-title-static { color: var(--faint); text-decoration: line-through; }
 .task-title-input { border: 1px solid transparent; background: transparent; padding: 4px 6px; font-size: 13.5px; color: var(--ink-soft); width: 100%; }
 .task-title-input:hover, .task-title-input:focus { border-color: var(--line-strong); background: var(--surface); color: var(--ink); }

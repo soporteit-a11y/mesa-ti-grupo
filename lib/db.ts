@@ -62,6 +62,10 @@ async function init(q: NonNullable<typeof sql>) {
   await q`ALTER TABLE initiative_tasks ADD COLUMN IF NOT EXISTS start_date DATE`;
   await q`ALTER TABLE initiative_tasks ADD COLUMN IF NOT EXISTS end_date DATE`;
   await q`ALTER TABLE initiative_tasks ADD COLUMN IF NOT EXISTS owner TEXT`;
+  // Sub-grupo del que venia la tarea en el Excel original, cuando la fase la
+  // absorbio de un nivel mas profundo. Se muestra como etiqueta pequena en vez
+  // de meterlo en el titulo, que ya de por si es largo.
+  await q`ALTER TABLE initiative_tasks ADD COLUMN IF NOT EXISTS context TEXT`;
   await q`ALTER TABLE initiatives ADD COLUMN IF NOT EXISTS start_date DATE`;
   await q`CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)`;
   await q`CREATE TABLE IF NOT EXISTS collaborators (
@@ -182,9 +186,10 @@ async function init(q: NonNullable<typeof sql>) {
   // sola vez. Si el usuario luego borra o edita esos cronogramas, no se vuelven
   // a crear: la clave en `meta` ya quedo puesta.
   const sinco = await q`SELECT v FROM meta WHERE k = 'sinco_seed'`;
-  if (sinco.length === 0) {
-    await seedSinco(q);
-    await q`INSERT INTO meta (k, v) VALUES ('sinco_seed', 'v1') ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
+  const sincoVer = sinco[0]?.v;
+  if (sincoVer !== "v2") {
+    await reimportarSinco(q, sincoVer);
+    await q`INSERT INTO meta (k, v) VALUES ('sinco_seed', 'v2') ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
   }
 
   // Reemplaza los tickets de ejemplo por los tickets reales del CSV (una sola vez).
@@ -326,22 +331,46 @@ async function seedRealTickets(q: NonNullable<typeof sql>) {
 }
 
 /**
- * Crea los cronogramas de la implementacion de SINCO ERP en CMG a partir del
- * Excel del proveedor (ver lib/sinco-seed.ts y HANDOFF.md §5.12).
+ * Importa los cronogramas de SINCO ERP (CMG) desde lib/sinco-seed.ts.
  *
- * Ninguna tarea se marca como completada: el Excel solo trae fechas, no lleva
- * columna de avance, asi que dar por hecho lo que ya paso seria inventarse un
- * progreso que no consta en ningun lado. Eddy va marcando lo que de verdad se hizo.
+ * La v1 agrupaba las fases por "el nodo mas profundo del Excel", lo que partia
+ * secciones que van juntas (p.ej. "Parametrizacion Ambiente de Produccion"
+ * quedaba rota en tres fases sueltas) y resultaba incomprensible. La v2 usa los
+ * hijos directos del contenedor, que es la seccion tal cual la escribio el
+ * proveedor. Ver HANDOFF.md §5.12.
+ *
+ * Al pasar de v1 a v2 hay que reemplazar lo ya importado, pero **solo si nadie
+ * ha marcado nada todavia**: si Eddy ya registro avance real, borrarlo para
+ * reorganizar seria destruir trabajo suyo. En ese caso no se toca nada y se
+ * queda la estructura vieja.
+ *
+ * Ninguna tarea se importa marcada como completada: el Excel solo trae fechas,
+ * no lleva columna de avance, y dar por hecho lo que ya paso seria inventarse un
+ * progreso que no consta en ningun lado.
  */
-async function seedSinco(q: NonNullable<typeof sql>) {
+async function reimportarSinco(q: NonNullable<typeof sql>, versionPrevia: string | undefined) {
   const cs = await q`SELECT id, name FROM companies WHERE name = 'CMG'`;
   const cmg = cs[0]?.id;
   if (!cmg) return;
 
-  let posCrono = 0;
+  if (versionPrevia) {
+    const marcadas = await q`
+      SELECT COUNT(*)::int AS n FROM initiative_tasks t
+      JOIN initiatives i ON i.id = t.initiative_id
+      WHERE i.company_id = ${cmg} AND i.title LIKE 'SINCO%' AND t.done = true`;
+    if (marcadas[0].n > 0) {
+      console.warn(
+        "[sinco] Hay avance marcado en los cronogramas de SINCO: se conserva la " +
+        "estructura anterior y NO se reimporta. Reorganizalos a mano o borralos " +
+        "desde /cronogramas si quieres la estructura nueva."
+      );
+      return;
+    }
+    await q`DELETE FROM initiatives WHERE company_id = ${cmg} AND title LIKE 'SINCO%'`;
+  }
+
   for (const c of SINCO_CRONOGRAMAS) {
-    // Si ya existe un cronograma con ese titulo no se duplica (por si esta
-    // funcion llegara a correr dos veces por una carrera entre instancias).
+    // Guarda contra duplicados si dos instancias corrieran esto a la vez.
     const dup = await q`SELECT id FROM initiatives WHERE company_id = ${cmg} AND title = ${c.titulo}`;
     if (dup.length > 0) continue;
 
@@ -360,12 +389,11 @@ async function seedSinco(q: NonNullable<typeof sql>) {
       posFase++;
 
       for (const t of f.tareas) {
-        await q`INSERT INTO initiative_tasks (initiative_id, phase_id, title, done, position, start_date, end_date, owner)
-          VALUES (${iniId}, ${faseId}, ${t.t}, false, ${posTarea}, ${t.ini}, ${t.fin}, ${t.resp || null})`;
+        await q`INSERT INTO initiative_tasks (initiative_id, phase_id, title, done, position, start_date, end_date, owner, context)
+          VALUES (${iniId}, ${faseId}, ${t.t}, false, ${posTarea}, ${t.ini}, ${t.fin}, ${t.resp || null}, ${t.ctx || null})`;
         posTarea++;
       }
     }
-    posCrono++;
   }
 }
 
