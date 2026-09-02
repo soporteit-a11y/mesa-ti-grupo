@@ -12,6 +12,7 @@ import { AddPhaseForm } from "@/components/AddPhaseForm";
 import { PhaseBlock, fmtRango } from "@/components/PhaseBlock";
 import { GanttChart } from "@/components/GanttChart";
 import { Timeline } from "@/components/Timeline";
+import { ProjectOverview } from "@/components/ProjectOverview";
 import { Collapsible, ExpandirTodo } from "@/components/Collapsible";
 import { InitiativeStatusControl } from "@/components/InitiativeStatusControl";
 import { InitiativeTitle } from "@/components/InitiativeTitle";
@@ -127,6 +128,14 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                   {g.items.length} cronograma(s)
                 </span>
               </div>
+
+              {/* Resumen global: solo tiene sentido si hay varios cronogramas
+                  que comparar dentro de la misma empresa. */}
+              {g.items.length > 1 && (
+                <div style={{ marginBottom: 16 }}>
+                  <ProjectOverview initiatives={g.items} company={company} color={g.color} />
+                </div>
+              )}
 
               <div className={compacta ? "grid" : "grid g2"}>
                 {g.items.map((i: any) => {

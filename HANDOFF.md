@@ -526,8 +526,26 @@ estaba planificado. Dar por hecho lo que ya pasó habría inventado un avance qu
 ninguna parte — se le preguntó al usuario y confirmó dejarlo todo sin marcar. **Si vuelves a
 importar algo así, no asumas que "fecha pasada" significa "hecho".**
 
-**5 fases quedaron sin fecha** porque en el Excel dicen "Por Definir". El Gantt no las dibuja
-(no se puede ubicar en una línea de tiempo lo que no tiene fecha) y las lista aparte debajo.
+**Las 5 fases que el Excel dejó en "Por Definir" ahora tienen fecha estimada.** No son inventadas:
+el propio Excel dice de qué dependen en su columna de observaciones. `fecharFasesPendientes()` en
+`lib/db.ts` las deriva de ahí:
+
+| Fase | Estimado | De qué depende (según el Excel) |
+|---|---|---|
+| A&F · Migración de Activos Fijos a Producción | 5–12 ene 27 | tras Activos Fijos en Pruebas (24 dic) |
+| A&F · Capacitaciones Segundo Nivel | 7–29 ene 27 | tras Migración de Históricos (10 dic) y Activos Fijos en Pruebas (24 dic) |
+| A&F · Consultoría Final | 3–4 feb 27 | cierre del módulo, antes del fin de HABILITAR (8 feb) |
+| ADPRO · Capacitaciones y Acompañamientos 2º Nivel | 25 nov – 18 dic 26 | tras la Salida a Producción de ADPRO (19 nov) |
+| ADPRO · Consultoría Final | 21–22 ene 27 | cierre del módulo |
+
+Se evitó a propósito el periodo navideño y todo encaja dentro del límite de HABILITAR (8 feb 27).
+Cada una queda marcada en su `context` como *"fecha estimada — el Excel dice «Por Definir»"* para
+que en pantalla se distinga de las fechas confirmadas por el proveedor. Cuando SINCOSOFT confirme
+las reales, se editan desde `/cronogramas`.
+
+Esta migración va **aparte del seed y solo con `UPDATE`** (clave `sinco_fechas` en `meta`), no
+borra nada: así se puede aplicar aunque el usuario ya haya marcado avance. Solo toca fases cuyo
+`start_date` sigue en `NULL`, así que tampoco pisa una fecha puesta a mano.
 
 **El archivo generado.** `lib/sinco-seed.ts` (~49 KB) lo produjo un script a partir del Excel; no
 se edita a mano. Se importa una sola vez con la clave `sinco_seed` en `meta`, mismo patrón que
@@ -559,6 +577,17 @@ fase, la numeración se recalcula sola en vez de quedar con huecos.
 | **Lista** | Trabajar: marcar tareas, editar fases, agregar cosas. |
 | **Gantt** | Ver el **solape** entre fases de un vistazo, sobre una línea de tiempo horizontal. |
 | **Línea de tiempo** | Leer el proyecto como una **historia de principio a fin**: cuánto duró cada fase, qué se hizo en ella y en qué punto va. |
+
+Encima de todo, cuando una empresa tiene **más de un cronograma**, se pinta
+`components/ProjectOverview.tsx`: una sola línea de tiempo con **todos** los cronogramas de esa
+empresa y, sobre todo, el dato que motivó pedirlo — **si el avance real va por detrás del tiempo
+consumido**. Compara dos porcentajes: días transcurridos sobre días totales, contra tareas hechas
+sobre tareas totales. Si el avance queda 5+ puntos por debajo del tiempo, el veredicto dice
+"Atrasado N puntos" en rojo.
+
+Ese `% esperado` es una regla de tres sobre el calendario, **no una curva ponderada por esfuerzo**.
+Es una aproximación honesta y suficiente para responder "¿vamos atrasados?"; no pretende ser una
+línea base de valor ganado, y conviene no venderla como tal.
 
 Gantt y Línea de tiempo no son lo mismo con otra pintura: el Gantt responde "¿qué pasa a la vez?"
 y la línea de tiempo responde "¿cuánto llevamos y cuánto falta?". La línea de tiempo incluye un

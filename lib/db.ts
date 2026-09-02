@@ -192,6 +192,15 @@ async function init(q: NonNullable<typeof sql>) {
     await q`INSERT INTO meta (k, v) VALUES ('sinco_seed', 'v2') ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
   }
 
+  // Fechas tentativas para las fases que el Excel dejo en "Por Definir".
+  // Va aparte del seed y solo con UPDATE, no borra nada: asi se puede aplicar
+  // aunque Eddy ya haya marcado avance.
+  const fechas = await q`SELECT v FROM meta WHERE k = 'sinco_fechas'`;
+  if (fechas.length === 0) {
+    await fecharFasesPendientes(q);
+    await q`INSERT INTO meta (k, v) VALUES ('sinco_fechas', 'v1') ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
+  }
+
   // Reemplaza los tickets de ejemplo por los tickets reales del CSV (una sola vez).
   const ver = await q`SELECT v FROM meta WHERE k = 'tickets_seed'`;
   if (ver.length === 0 || ver[0].v !== "csv-v1") {
@@ -395,6 +404,58 @@ async function reimportarSinco(q: NonNullable<typeof sql>, versionPrevia: string
       }
     }
   }
+}
+
+/**
+ * Pone fecha tentativa a las fases que el Excel dejo en "Por Definir".
+ *
+ * No son inventadas: el propio Excel dice de que dependen en su columna de
+ * observaciones ("Se programa una vez se finalice la migracion de historicos",
+ * "...despues de la salida a produccion", etc.). De ahi salen estas fechas,
+ * encajadas ademas dentro del limite de la etapa HABILITAR (8-feb-2027) y
+ * evitando el periodo navideno.
+ *
+ * Quedan marcadas con `context` para que en pantalla se vea que son estimadas y
+ * no fechas confirmadas por el proveedor. Cuando SINCOSOFT confirme las reales,
+ * se editan desde /cronogramas.
+ */
+async function fecharFasesPendientes(q: NonNullable<typeof sql>) {
+  const NOTA = "fecha estimada — el Excel dice «Por Definir»";
+
+  // [cronograma, fase, inicio, fin, de que depende]
+  const est: [string, string, string, string, string][] = [
+    ["SINCO 3 · A&F — BD Principal", "Migración de Activos Fijos a Producción",
+     "2027-01-05", "2027-01-12", "tras Activos Fijos en Pruebas (fin 24-dic)"],
+    ["SINCO 3 · A&F — BD Principal", "Capacitaciones Segundo Nivel",
+     "2027-01-07", "2027-01-29", "tras Migración de Históricos (10-dic) y Activos Fijos en Pruebas (24-dic)"],
+    ["SINCO 3 · A&F — BD Principal", "Consultoría Final A&F",
+     "2027-02-03", "2027-02-04", "cierre del módulo, antes del fin de HABILITAR (8-feb)"],
+    ["SINCO 8 · ADPRO (Proyectos de obra)", "Capacitaciones y Acompañamientos Segundo Nivel ADPRO",
+     "2026-11-25", "2026-12-18", "tras la Salida a Producción de ADPRO (19-nov)"],
+    ["SINCO 8 · ADPRO (Proyectos de obra)", "Consultoría Final ADPRO",
+     "2027-01-21", "2027-01-22", "cierre del módulo ADPRO"],
+  ];
+
+  for (const [crono, fase, ini, fin, porque] of est) {
+    await q`
+      UPDATE initiative_phases p
+      SET start_date = ${ini}, end_date = ${fin}, context = ${NOTA + " · " + porque}
+      FROM initiatives i
+      WHERE p.initiative_id = i.id AND i.title = ${crono} AND p.title = ${fase}
+        AND p.start_date IS NULL`;
+  }
+
+  // Las fechas del cronograma se recalculan a partir de sus fases, si no
+  // quedarian desfasadas respecto a lo que ahora si tiene fecha.
+  await q`
+    UPDATE initiatives i SET
+      start_date = s.ini,
+      due_date = s.fin
+    FROM (
+      SELECT initiative_id, MIN(start_date) AS ini, MAX(end_date) AS fin
+      FROM initiative_phases GROUP BY initiative_id
+    ) s
+    WHERE i.id = s.initiative_id AND i.title LIKE 'SINCO%'`;
 }
 
 async function seedAdmin(q: NonNullable<typeof sql>) {
