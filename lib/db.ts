@@ -422,6 +422,10 @@ async function reimportarSinco(q: NonNullable<typeof sql>, versionPrevia: string
 async function fecharFasesPendientes(q: NonNullable<typeof sql>) {
   const NOTA = "fecha estimada — el Excel dice «Por Definir»";
 
+  const cs = await q`SELECT id FROM companies WHERE name = 'CMG'`;
+  const cmg = cs[0]?.id;
+  if (!cmg) return;
+
   // Se busca por el NOMBRE DE LA FASE, no por el del cronograma: el usuario
   // renombra los cronogramas ("SINCO 1 · Preparar" -> "ETAPA 1 - SINCO ·
   // Preparar") y la version anterior de esta funcion comparaba `i.title` con un
