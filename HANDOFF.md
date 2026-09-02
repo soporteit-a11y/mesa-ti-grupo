@@ -510,6 +510,20 @@ se edita a mano. Se importa una sola vez con la clave `sinco_seed` en `meta`, mi
 `tickets_seed` (§5.5). Si Eddy luego borra o reorganiza esos cronogramas, **no se vuelven a
 crear**: la clave ya quedó puesta.
 
+**Todo se pliega** (`components/Collapsible.tsx`). Con 9 cronogramas, 61 fases y 249 tareas, la
+página abierta de golpe es inmanejable — el usuario lo reportó nada más verla. Cronogramas y fases
+son bloques plegables; plegado, cada uno sigue mostrando su barra de avance, así que la vista
+comprimida sigue diciendo lo importante. Los cronogramas **con fases arrancan plegados** y los
+planos y cortos (los de las otras tres empresas) **abiertos**, para no obligar a un clic extra
+donde no hace falta. Hay botones de "Expandir / Contraer" para cronogramas y para fases.
+
+El estado abierto/cerrado se guarda en `localStorage`, no en React a secas, por una razón
+concreta: marcar una tarea dispara `revalidatePath` y repinta la página; sin persistir, **todo lo
+que tuvieras abierto se cerraría en cada clic**. El valor se lee en un `useEffect` y no durante el
+render, porque leer `localStorage` al renderizar rompe la hidratación (servidor y cliente
+pintarían cosas distintas). Los accesos van en `try/catch`: en navegación privada `localStorage`
+puede lanzar y eso no debe tumbar la página.
+
 **El Gantt** (`components/GanttChart.tsx`) está hecho a mano con posicionamiento porcentual, sin
 librerías, igual que las donas y barras del dashboard. Dibuja una barra por fase, con relleno
 proporcional al avance, marca del día de hoy (calculado en zona de RD, §5.8) y borde rojo en las

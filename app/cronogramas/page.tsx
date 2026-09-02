@@ -11,6 +11,7 @@ import { AddTaskForm } from "@/components/AddTaskForm";
 import { AddPhaseForm } from "@/components/AddPhaseForm";
 import { PhaseBlock, fmtRango } from "@/components/PhaseBlock";
 import { GanttChart } from "@/components/GanttChart";
+import { Collapsible, ExpandirTodo } from "@/components/Collapsible";
 import { InitiativeStatusControl } from "@/components/InitiativeStatusControl";
 import { InitiativeTitle } from "@/components/InitiativeTitle";
 import { InitiativeDueDate } from "@/components/InitiativeDueDate";
@@ -98,6 +99,8 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
             <Link href={url(null)} className={"btn sm" + (gantt ? "" : " active")}>Lista</Link>
             <Link href={url("gantt")} className={"btn sm" + (gantt ? " active" : "")}>Gantt</Link>
           </div>
+          {!gantt && <ExpandirTodo alcance="crono." etiqueta="cronogramas" />}
+          {!gantt && <ExpandirTodo alcance="fase." etiqueta="fases" />}
           <span className="fcount">{rows.length} cronograma(s)</span>
         </div>
 
@@ -125,8 +128,8 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                   const due = dueInfo(i.due_date, i.status);
                   const rango = fmtRango(i.start_date, i.due_date);
                   const conFases = i.phases.length > 0;
-                  return (
-                    <article className="card init-card" key={i.id}>
+                  const cabecera = (
+                    <>
                       <div className="init-top">
                         <div className="init-head">
                           {esAdmin
@@ -163,13 +166,21 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                           )}
                         </div>
                       </div>
+                    </>
+                  );
 
-                      <div className="progress-wrap">
-                        <div className="progress-track">
-                          <div className="progress-fill" style={{ width: `${i.progress}%`, background: g.color }} />
-                        </div>
-                        <span className="progress-label mono">{i.done}/{i.total} · {i.progress}%</span>
+                  const barra = (
+                    <div className="progress-wrap">
+                      <div className="progress-track">
+                        <div className="progress-fill" style={{ width: `${i.progress}%`, background: g.color }} />
                       </div>
+                      <span className="progress-label mono">{i.done}/{i.total} · {i.progress}%</span>
+                    </div>
+                  );
+
+                  const cuerpo = (
+                    <>
+                      {barra}
 
                       {gantt ? (
                         <GanttChart initiative={i} />
@@ -206,6 +217,21 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                           {esAdmin && <AddPhaseForm initiativeId={i.id} />}
                         </>
                       )}
+                    </>
+                  );
+
+                  return (
+                    <article className="card init-card" key={i.id}>
+                      <Collapsible
+                        storageKey={`crono.${i.id}`}
+                        // Los cronogramas con fases (los de SINCO, muy largos)
+                        // arrancan plegados; los planos y cortos, abiertos.
+                        defaultOpen={!conFases}
+                        head={cabecera}
+                        meta={barra}
+                      >
+                        {cuerpo}
+                      </Collapsible>
                     </article>
                   );
                 })}
