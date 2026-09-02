@@ -141,8 +141,12 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
 
               <div className={compacta ? "grid" : "grid g2"}>
                 {g.items.map((i: any) => {
-                  const due = dueInfo(i.due_date, i.status);
-                  const rango = fmtRango(i.start_date, i.due_date);
+                  // El rango sale de las fases (calcStart/calcEnd), no de las
+                  // columnas guardadas: esas se quedan viejas al mover una fase.
+                  const rango = fmtRango(i.calcStart, i.calcEnd);
+                  // Para el chip de vencimiento manda la fecha limite manual si
+                  // existe; si no, el fin real del cronograma.
+                  const due = dueInfo(i.due_date || i.calcEnd, i.status);
                   const conFases = i.phases.length > 0;
                   const cabecera = (
                     <>
@@ -162,7 +166,7 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                           </div>
                           <div className="init-due-row">
                             {esAdmin ? (
-                              <InitiativeDueDate id={i.id} dueDate={i.due_date} />
+                              <InitiativeDueDate id={i.id} dueDate={i.due_date} rango={rango} />
                             ) : rango ? (
                               <span className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>{rango}</span>
                             ) : null}

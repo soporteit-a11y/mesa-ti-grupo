@@ -1,4 +1,5 @@
 import { sql, ensureSchema } from "./db";
+import { toYMD } from "./dates";
 
 export async function getCompanies() {
   await ensureSchema();
@@ -289,6 +290,13 @@ export type Initiative = {
   phases: Phase[];
   /** Tareas que no pertenecen a ninguna fase (modelo antiguo, plano). */
   looseTasks: Task[];
+  /**
+   * Rango real del cronograma, calculado a partir de sus fases en cada lectura.
+   * Se prefiere a start_date/due_date para mostrar: esas dos son columnas
+   * guardadas que se quedan viejas en cuanto mueves la fecha de una fase.
+   */
+  calcStart: string | null;
+  calcEnd: string | null;
   total: number;
   done: number;
   progress: number;
@@ -324,11 +332,32 @@ export async function getInitiatives(): Promise<Initiative[]> {
         const pt = t.filter((x) => x.phase_id === p.id);
         return { ...p, tasks: pt, ...avance(pt) } as Phase;
       });
+    // Rango real: la fase que empieza antes y la que termina despues. Se
+    // consideran tambien las fechas de las tareas sueltas, para que un
+    // cronograma sin fases tampoco se quede sin rango.
+    const inicios: string[] = [];
+    const fines: string[] = [];
+    for (const p of ph) {
+      const a = toYMD(p.start_date);
+      const b = toYMD(p.end_date);
+      if (a) inicios.push(a);
+      if (b) fines.push(b);
+    }
+    for (const x of t) {
+      const a = toYMD(x.start_date);
+      const b = toYMD(x.end_date);
+      if (a) inicios.push(a);
+      if (b) fines.push(b);
+    }
+
     return {
       ...i,
       tasks: t,
       phases: ph,
       looseTasks: t.filter((x) => x.phase_id == null),
+      // Como son 'YYYY-MM-DD', el orden alfabetico es el orden cronologico.
+      calcStart: inicios.length ? inicios.sort()[0] : null,
+      calcEnd: fines.length ? fines.sort()[fines.length - 1] : null,
       ...avance(t),
     } as Initiative;
   });
