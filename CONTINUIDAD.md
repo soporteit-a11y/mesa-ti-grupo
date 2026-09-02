@@ -6,8 +6,12 @@
 > quedó y qué hay que saber para continuar sin perder nada. La descripción técnica completa,
 > con el código fuente íntegro, está en **`HANDOFF.md`**, en esta misma carpeta.
 >
-> **Última sesión:** 1 de septiembre de 2026
-> **Estado del sistema:** en producción, funcionando, sin incidencias abiertas.
+> **Última sesión:** 2 de septiembre de 2026
+> **Estado del sistema:** en producción, funcionando, sin incidencias abiertas. Está en curso un
+> sistema de login con roles (ver HANDOFF.md §5.11) — esta primera entrega solo monta el esquema
+> y la pantalla de `/login`, **todavía no bloquea ninguna ruta** (falta el middleware, que es la
+> siguiente entrega). Necesita que agregues `ADMIN_NAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` en las
+> variables de entorno de Vercel para que se cree tu cuenta de admin — ver P0.bis abajo.
 >
 > ### 👉 ¿Buscas qué hay que hacer? Está todo en **§3.bis · TODO LO PENDIENTE**
 > Doce puntos numerados de P0 a P11, ordenados por prioridad. Nada de eso bloquea el
@@ -126,6 +130,12 @@ Cómo terminar de verificarlo está en el pendiente **P1** de la sección siguie
 > Nada de esto bloquea el funcionamiento actual: el sistema está en producción y operativo.
 
 ### 🔴 Antes de cambiar de cuenta — hazlo primero
+
+**P0.bis · Variables de entorno del login (`ADMIN_NAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD`).**
+Sin estas tres en Vercel (Project Settings → Environment Variables), la tabla `users` se queda
+vacía y `/login` no deja entrar a nadie — ver HANDOFF.md §5.11. Solo se leen una vez (mientras
+`users` esté vacía), así que se pueden borrar de Vercel después del primer login exitoso si se
+prefiere no dejar la contraseña ahí en texto plano indefinidamente.
 
 **P0 · Volcado de la base de datos.**
 Es lo único verdaderamente irrecuperable. El repositorio **no** contiene los datos reales (§6):

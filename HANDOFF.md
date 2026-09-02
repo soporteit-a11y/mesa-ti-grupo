@@ -13,10 +13,16 @@
 > ya descubiertas.
 >
 > **Fecha del traspaso:** 24 de agosto de 2026
-> **Última actualización:** 1 de septiembre de 2026 — el panel "Tickets por categoría" del
-> dashboard ahora se divide en "Categorías actuales" y "Categorías anteriores" (Top 5 cada una),
-> porque tras reorganizar categorías en Configuración quedaban tickets viejos con nombres de
-> categoría que ya no existen, mezclados con las pocas categorías nuevas. Ver §5.10.
+> **Última actualización:** 2 de septiembre de 2026 — arrancó la implementación de **login con
+> roles** (tabla `users`/`sessions`, hashing de contraseñas, `/login`, acciones `login`/`logout`).
+> **Esta primera entrega todavía NO bloquea ninguna ruta** — no hay `middleware.ts` todavía, así
+> que el sistema sigue siendo tan abierto como antes salvo por el hecho de que ahora existe una
+> pantalla de login funcional. El bloqueo real por rol (middleware, vistas restringidas para el
+> rol "agente", CRUD de Usuarios en `/config`) es la siguiente entrega, a propósito separada para
+> no mezclar un cambio de seguridad con la puesta en marcha del esquema. Ver §5.11.
+> **Acción pendiente tuya:** agregar `ADMIN_NAME`, `ADMIN_EMAIL` y `ADMIN_PASSWORD` en las
+> variables de entorno de Vercel — sin esas tres, no se crea ninguna cuenta y `/login` no deja
+> entrar a nadie. Ver §5.11.
 > **Estado:** en producción y en uso real. El episodio de auto-deploy estancado del commit
 > `abfde59` (documentado antes aquí) se resolvió solo — el build siguiente lo alcanzó y quedó
 > confirmado en vivo; ver §10 igual por si vuelve a pasar.
@@ -331,6 +337,70 @@ Top 9 combinado como antes. Si algún grupo queda vacío (por ejemplo, todavía 
 ninguna categoría nueva) se muestra un mensaje en vez de una lista vacía. La tabla "Detalle de
 tickets por categoría" (columna 3) no cambió: sigue listando **todas** las categorías sin dividir,
 porque ahí el objetivo es el detalle completo, no un resumen.
+
+### 5.11 Autenticación — login con roles (en curso, empezado 2026-09-02)
+
+Hasta esta tanda, Mesa TI no tenía **ningún** tipo de login: cualquiera con la URL de producción
+podía ver y editar todo, incluyendo `/config`. Se está agregando un sistema de cuentas con dos
+roles: **admin** (Eddy, ve y edita todo, igual que hoy) y **agent** (el resto del personal, que
+solo podrá crear tickets, ver los que él mismo creó, y ver/marcar tareas de la ruta de CMG — esa
+parte todavía no está implementada, ver más abajo).
+
+**Por qué se partió en dos entregas.** Agregar autenticación sobre una app en producción con
+datos reales es un cambio de superficie de seguridad: si el middleware que bloquea rutas tiene un
+error, puede dejar a Eddy fuera de su propio sistema sin manera de entrar. Por eso esta primera
+entrega **solo** monta el esquema, el hashing de contraseñas, las sesiones y la pantalla de
+login — deliberadamente **sin** `middleware.ts` todavía, para poder confirmar en producción que
+el login funciona antes de que nada empiece a bloquear rutas. La segunda entrega (pendiente)
+agrega el middleware, las vistas restringidas por rol, y la sección "Usuarios" en `/config` para
+crear cuentas de tipo `agent` (por ahora, sin esa sección, la única cuenta que existe es el admin
+sembrado por variables de entorno).
+
+**Contraseñas, sin agregar dependencias.** `lib/password.ts` usa `crypto.scryptSync` (nativo de
+Node) para el hash, guardado como `salt:hashHex` en `users.password_hash`, y
+`crypto.timingSafeEqual` para comparar sin filtrar tiempos de respuesta. No se agregó bcrypt ni
+ninguna librería — coherente con que este proyecto no tiene dependencias más allá de Next/React/
+el driver de Neon.
+
+**Por qué `lib/session.ts` está separado de `lib/auth.ts`.** El middleware de Next 14 corre en
+**Edge Runtime**, que no soporta el módulo `crypto` de Node (ni nada que lo importe, aunque sea
+indirectamente — el bundler de Edge falla al empaquetarlo). Por eso `lib/session.ts` no importa
+nada de Node: solo hace una consulta SQL vía el `sql` de `lib/db.ts` (que sí es edge-compatible,
+es HTTP puro) para resolver un token de sesión a `{id, name, email, role}`. Es lo único que el
+middleware (cuando se agregue) podrá importar. `lib/auth.ts`, en cambio, sí usa `crypto` y
+`next/headers` (cookies) — lo usan las Server Actions y los Server Components, que corren en
+Node, nunca el middleware.
+
+**Sesiones.** Tabla `sessions` (`token` como PK, texto aleatorio de 32 bytes vía
+`crypto.randomBytes`, `user_id`, `expires_at`) en una cookie `httpOnly`/`sameSite=lax`, 30 días.
+Se valida contra la base en cada request — coherente con que toda la app ya es `force-dynamic` y
+hace consultas por request de por sí. `getSession()` en `lib/session.ts` envuelve la consulta en
+un `try/catch` que devuelve "no logueado" ante cualquier error, en vez de tumbar la página — esto
+importa porque en un deploy nuevo las tablas `users`/`sessions` podrían no existir todavía la
+primera vez que el middleware corre (antes de que cualquier página dispare `ensureSchema()`).
+
+**Cómo arranca la primera cuenta.** No hay auto-registro (sería un hueco de seguridad en una URL
+pública) y no puede haber una pantalla para crear el primer usuario antes de que exista ningún
+usuario. La solución: en `ensureSchema()`, si `users` está vacía y existen las variables de
+entorno `ADMIN_NAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` (que Eddy agrega él mismo en Vercel — la IA
+que trabaje en este proyecto nunca debe ver ni manejar la contraseña real), se crea esa fila con
+rol `admin`. Sin esas variables, `seedAdmin()` no hace nada y nadie puede entrar todavía. Una vez
+que la cuenta existe, esas variables ya no se vuelven a leer (la tabla ya no está vacía), así que
+se pueden borrar de Vercel después del primer login si se quiere.
+
+**Excepción deliberada al patrón de "fallo silencioso".** Todas las Server Actions del proyecto
+no-opean en silencio ante datos inválidos (sin mensaje de error, ver §5.2). El login es la única
+excepción a propósito: si el correo o la contraseña no coinciden, la acción `login` hace
+`redirect('/login?error=1')` y la página de login muestra "Correo o contraseña incorrectos." — sin
+esto, alguien que escribe mal su contraseña no tendría ninguna pista de qué pasó.
+
+**Lo que falta (próxima entrega, no incluido todavía):** `middleware.ts` para bloquear rutas por
+rol, la sección "Usuarios" en `/config` (crear/editar/borrar cuentas `agent`), la página
+`/mis-tickets` para el rol agente, restricciones de rol dentro de `app/actions.ts` (por ahora
+ninguna acción existente comprueba el rol — `login`/`logout` son las únicas dos acciones nuevas),
+y las vistas de solo-lectura/CMG-únicamente en `/rutas`. Hasta que eso se agregue, la app sigue
+siendo tan abierta como siempre para cualquiera que no pase por `/login` — el login existe, pero
+todavía no es obligatorio para nada.
 
 ---
 
@@ -870,6 +940,35 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
+### 2 de septiembre de 2026 (tanda 1 de 2) — Base del login (esquema + sesiones, sin bloquear rutas todavía)
+
+El usuario pidió login con roles (admin ve todo; el resto del personal solo crea tickets, ve los
+propios, y ve/tilda tareas de la ruta de CMG) más una reestructura de "Rutas de trabajo" en fases
+para el rollout de SINCO ERP en CMG. Por el riesgo de dejar el sistema inaccesible si algo sale
+mal en el bloqueo de rutas, se decidió partir el trabajo en dos entregas — esta es la primera.
+
+- `lib/db.ts`: nuevas tablas `users` (`id, name, email UNIQUE, password_hash, role DEFAULT 'agent', created_at`)
+  y `sessions` (`token PK, user_id, expires_at, created_at`); `tickets` gana
+  `created_by INT REFERENCES users(id)` (nullable, para no romper tickets históricos); nueva
+  `seedAdmin(q)` que crea la primera cuenta (`role='admin'`) solo si `users` está vacía y existen
+  `ADMIN_NAME`/`ADMIN_EMAIL`/`ADMIN_PASSWORD` en el entorno.
+- `lib/password.ts` (nuevo): `hashPassword`/`verifyPassword` con `crypto.scryptSync` +
+  `timingSafeEqual` — sin agregar ninguna dependencia.
+- `lib/session.ts` (nuevo, edge-safe, sin imports de Node): `getSession(token)` — la única pieza
+  que un futuro `middleware.ts` podrá importar sin romper el bundle de Edge Runtime.
+- `lib/auth.ts` (nuevo, Node): `createSessionCookie`, `clearSessionCookie`, `getCurrentUser`,
+  `requireAdmin` — usa `next/headers` y `crypto`, solo lo importan Server Actions/Components.
+- `app/actions.ts`: nuevas acciones `login` (verifica credenciales, crea sesión, redirige según
+  rol; `redirect('/login?error=1')` si falla — única excepción al patrón de fallo silencioso del
+  resto del archivo) y `logout` (borra la sesión, limpia la cookie, redirige a `/login`).
+- `app/login/page.tsx` (nuevo) + estilos `.auth-*` en `app/globals.css` (más
+  `input[type=email]`/`input[type=password]` agregados al selector base de inputs, que antes solo
+  cubría `type=text`).
+- **Deliberadamente NO incluido en esta entrega:** `middleware.ts`, restricciones de rol en las
+  acciones existentes, sección "Usuarios" en `/config`, página `/mis-tickets`, vistas
+  restringidas en `/rutas`. El sistema sigue siendo tan abierto como antes; solo existe una
+  pantalla de login funcional. Ver §5.11 para el detalle completo y lo que falta.
+
 ### 1 de septiembre de 2026 — Categorías actuales vs. anteriores en el Top del dashboard
 
 El usuario reportó que el panel "Tickets por categoría" (antes un Top 9 combinado) ya no
@@ -1407,6 +1506,7 @@ npm-debug.log*
 
 ```ts
 import { neon } from "@neondatabase/serverless";
+import { hashPassword } from "./password";
 
 const connectionString =
   process.env.POSTGRES_URL ||
@@ -1476,6 +1576,15 @@ async function init(q: NonNullable<typeof sql>) {
     title TEXT UNIQUE NOT NULL,
     text TEXT NOT NULL
   )`;
+  await q`CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'agent',
+    created_at TIMESTAMPTZ DEFAULT now()
+  )`;
+  await q`CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY, user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ DEFAULT now()
+  )`;
 
   // Migracion para BD existente (tickets antiguos con columnas NOT NULL)
   await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category TEXT`;
@@ -1484,6 +1593,7 @@ async function init(q: NonNullable<typeof sql>) {
   await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS email TEXT`;
   await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS phone TEXT`;
   await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolution_minutes INT`;
+  await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id)`;
   try { await q`ALTER TABLE tickets ALTER COLUMN priority DROP NOT NULL`; } catch (e) {}
 
   // Limpieza de columnas y tabla del modelo de priorizacion P1-P4, ya sin uso (2026-08-25).
@@ -1521,6 +1631,9 @@ async function init(q: NonNullable<typeof sql>) {
 
   const cr = await q`SELECT COUNT(*)::int AS n FROM canned_responses`;
   if (cr[0].n === 0) await seedCanned(q);
+
+  const us = await q`SELECT COUNT(*)::int AS n FROM users`;
+  if (us[0].n === 0) await seedAdmin(q);
 
   // SLA por defecto por categoria (una sola vez; luego editable en Configuracion).
   const slaVer = await q`SELECT v FROM meta WHERE k = 'category_sla_v1'`;
@@ -1683,6 +1796,15 @@ async function seedRealTickets(q: NonNullable<typeof sql>) {
   }
 }
 
+async function seedAdmin(q: NonNullable<typeof sql>) {
+  const name = process.env.ADMIN_NAME || "Admin";
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
+  if (!email || !password) return;
+  const hash = hashPassword(password);
+  await q`INSERT INTO users (name, email, password_hash, role) VALUES (${name}, ${email}, ${hash}, 'admin') ON CONFLICT (email) DO NOTHING`;
+}
+
 async function seedCollaborators(q: NonNullable<typeof sql>) {
   const cs = await q`SELECT id, name FROM companies`;
   const cId = (n: string) => cs.find((r: any) => r.name === n)?.id ?? null;
@@ -1728,6 +1850,104 @@ async function seedInitiatives(q: NonNullable<typeof sql>) {
       pos++;
     }
   }
+}
+```
+
+### `lib/password.ts` (nuevo, 2026-09-02)
+
+Hashing de contraseñas sin agregar dependencias — `crypto` es nativo de Node.
+
+```ts
+import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
+
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+export function verifyPassword(password: string, stored: string): boolean {
+  const [salt, hash] = stored.split(":");
+  if (!salt || !hash) return false;
+  const candidate = scryptSync(password, salt, 64);
+  const expected = Buffer.from(hash, "hex");
+  if (candidate.length !== expected.length) return false;
+  return timingSafeEqual(candidate, expected);
+}
+```
+
+### `lib/session.ts` (nuevo, 2026-09-02)
+
+**Edge-safe a propósito** — sin ningún import de Node, solo el `sql` de `lib/db.ts` (HTTP puro,
+funciona en Edge Runtime). Es lo único que un futuro `middleware.ts` puede importar sin romper el
+bundle de Edge. Ver §5.11 para la explicación completa de por qué esto está separado de
+`lib/auth.ts`.
+
+```ts
+import { sql } from "./db";
+
+export type SessionUser = { id: number; name: string; email: string; role: string };
+
+export async function getSession(token: string | undefined | null): Promise<SessionUser | null> {
+  if (!token || !sql) return null;
+  try {
+    const rows = await sql`
+      SELECT u.id, u.name, u.email, u.role
+      FROM sessions s JOIN users u ON u.id = s.user_id
+      WHERE s.token = ${token} AND s.expires_at > now()`;
+    return (rows[0] as SessionUser) || null;
+  } catch (e) {
+    // Las tablas users/sessions pueden no existir todavia (deploy nuevo, nadie
+    // ha renderizado una pagina que dispare ensureSchema). Tratar como "no logueado"
+    // en vez de tumbar el middleware con un 500.
+    return null;
+  }
+}
+```
+
+### `lib/auth.ts` (nuevo, 2026-09-02)
+
+Node-only (usa `crypto` y `next/headers`) — nunca lo importa el middleware, solo Server
+Actions/Components.
+
+```ts
+import { randomBytes } from "crypto";
+import { cookies } from "next/headers";
+import { sql } from "./db";
+import { getSession, type SessionUser } from "./session";
+
+const SESSION_COOKIE = "session";
+const SESSION_DAYS = 30;
+
+export async function createSessionCookie(userId: number): Promise<void> {
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+  await sql!`INSERT INTO sessions (token, user_id, expires_at) VALUES (${token}, ${userId}, ${expiresAt.toISOString()})`;
+  cookies().set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    expires: expiresAt,
+  });
+}
+
+export async function clearSessionCookie(): Promise<void> {
+  const token = cookies().get(SESSION_COOKIE)?.value;
+  if (token) {
+    await sql!`DELETE FROM sessions WHERE token = ${token}`;
+  }
+  cookies().delete(SESSION_COOKIE);
+}
+
+export async function getCurrentUser(): Promise<SessionUser | null> {
+  const token = cookies().get(SESSION_COOKIE)?.value;
+  return getSession(token);
+}
+
+export async function requireAdmin(): Promise<boolean> {
+  const user = await getCurrentUser();
+  return user?.role === "admin";
 }
 ```
 
@@ -2125,13 +2345,36 @@ export function fmtDuration(minutes: number): string {
 
 ### `app/actions.ts`
 
-Las 28 mutaciones del sistema, todas con el patrón de cinco pasos.
+Las mutaciones del sistema. La mayoría sigue el patrón de cinco pasos (ver §5.2); `login` es la
+única excepción deliberada al fallo silencioso (ver §5.11).
 
 ```ts
 "use server";
 
 import { sql, ensureSchema } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { verifyPassword } from "@/lib/password";
+import { createSessionCookie, clearSessionCookie } from "@/lib/auth";
+
+export async function login(formData: FormData) {
+  await ensureSchema();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("password") || "");
+  if (!email || !password) redirect("/login?error=1");
+
+  const rows = await sql!`SELECT id, password_hash, role FROM users WHERE lower(email) = ${email}`;
+  const user = rows[0] as { id: number; password_hash: string; role: string } | undefined;
+  if (!user || !verifyPassword(password, user.password_hash)) redirect("/login?error=1");
+
+  await createSessionCookie(user!.id);
+  redirect(user!.role === "admin" ? "/" : "/mis-tickets");
+}
+
+export async function logout() {
+  await clearSessionCookie();
+  redirect("/login");
+}
 
 export async function createTicket(formData: FormData) {
   await ensureSchema();
@@ -3296,6 +3539,48 @@ export default async function ConfigPage() {
 }
 ```
 
+### `app/login/page.tsx` (nuevo, 2026-09-02)
+
+Sin protección de middleware todavía (ver §5.11) — por ahora es una página más, accesible aunque
+nada la obligue.
+
+```tsx
+import { login } from "@/app/actions";
+
+export const dynamic = "force-dynamic";
+
+export default function LoginPage({ searchParams }: { searchParams: Record<string, string> }) {
+  const hasError = searchParams?.error === "1";
+
+  return (
+    <div className="auth-wrap">
+      <form action={login} className="card auth-card">
+        <div className="auth-brand">
+          <img src="/droppett-icon-white.png" alt="Mesa TI" className="logo" />
+          <div>
+            <div className="bt">MESA&nbsp;TI</div>
+            <div className="bs">Grupo empresarial</div>
+          </div>
+        </div>
+        <h1 className="auth-title">Iniciar sesión</h1>
+        {hasError ? <p className="auth-error">Correo o contraseña incorrectos.</p> : null}
+        <div className="form-grid">
+          <div className="field">
+            <label>Correo</label>
+            <input type="email" name="email" required autoFocus placeholder="tu@correo.com" />
+          </div>
+          <div className="field">
+            <label>Contraseña</label>
+            <input type="password" name="password" required placeholder="••••••••" />
+          </div>
+        </div>
+        <button type="submit" className="btn primary auth-submit">Entrar</button>
+      </form>
+    </div>
+  );
+}
+```
+
 ---
 
 ## 15.5 Hoja de estilos
@@ -3375,6 +3660,17 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 }
 .nav-badge.crit { background: var(--crit); color: #0A0E15; }
 .nav-badge.warn { background: var(--high); color: #0A0E15; }
+
+/* ---------- Login ---------- */
+.auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.auth-card { width: 100%; max-width: 360px; padding: 28px 26px; display: flex; flex-direction: column; gap: 18px; }
+.auth-brand { display: flex; align-items: center; gap: 10px; }
+.auth-brand .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); object-fit: contain; padding: 5px; box-sizing: border-box; }
+.auth-brand .bt { font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: .02em; line-height: 1.1; }
+.auth-brand .bs { font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); letter-spacing: .04em; }
+.auth-title { font-size: 1.1rem; }
+.auth-error { font-size: 12.5px; color: var(--crit); background: var(--crit-w); border: 1px solid var(--crit); border-radius: var(--radius-sm); padding: 8px 10px; margin: 0; }
+.auth-submit { width: 100%; justify-content: center; }
 
 /* Texto solo para lectores de pantalla */
 .sr-only {
@@ -3651,7 +3947,7 @@ dialog.ticket-detail { max-width: 640px; }
 /* ---------- Forms / dialog ---------- */
 .form-grid { display: grid; gap: 14px; }
 .field label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 6px; }
-input[type=text], input[type=range], textarea, select {
+input[type=text], input[type=email], input[type=password], input[type=range], textarea, select {
   width: 100%; font-family: var(--font-sans); font-size: 14px; color: var(--ink);
   background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 9px 11px;
 }

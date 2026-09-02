@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import { hashPassword } from "./password";
 
 const connectionString =
   process.env.POSTGRES_URL ||
@@ -68,6 +69,15 @@ async function init(q: NonNullable<typeof sql>) {
     title TEXT UNIQUE NOT NULL,
     text TEXT NOT NULL
   )`;
+  await q`CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'agent',
+    created_at TIMESTAMPTZ DEFAULT now()
+  )`;
+  await q`CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY, user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ DEFAULT now()
+  )`;
 
   // Migracion para BD existente (tickets antiguos con columnas NOT NULL)
   await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category TEXT`;
@@ -76,6 +86,7 @@ async function init(q: NonNullable<typeof sql>) {
   await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS email TEXT`;
   await q`ALTER TABLE collaborators ADD COLUMN IF NOT EXISTS phone TEXT`;
   await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS resolution_minutes INT`;
+  await q`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS created_by INT REFERENCES users(id)`;
   try { await q`ALTER TABLE tickets ALTER COLUMN priority DROP NOT NULL`; } catch (e) {}
 
   // Limpieza de columnas y tabla del modelo de priorizacion P1-P4, ya sin uso (2026-08-25).
@@ -113,6 +124,9 @@ async function init(q: NonNullable<typeof sql>) {
 
   const cr = await q`SELECT COUNT(*)::int AS n FROM canned_responses`;
   if (cr[0].n === 0) await seedCanned(q);
+
+  const us = await q`SELECT COUNT(*)::int AS n FROM users`;
+  if (us[0].n === 0) await seedAdmin(q);
 
   // SLA por defecto por categoria (una sola vez; luego editable en Configuracion).
   const slaVer = await q`SELECT v FROM meta WHERE k = 'category_sla_v1'`;
@@ -273,6 +287,15 @@ async function seedRealTickets(q: NonNullable<typeof sql>) {
     await q`INSERT INTO tickets (title, description, company_id, category, priority, status, created_at, updated_at, resolved_at)
       VALUES (${title}, ${""}, ${cId(company)}, ${category}, ${priority}, 'resuelto', ${created}, ${closed}, ${closed})`;
   }
+}
+
+async function seedAdmin(q: NonNullable<typeof sql>) {
+  const name = process.env.ADMIN_NAME || "Admin";
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
+  if (!email || !password) return;
+  const hash = hashPassword(password);
+  await q`INSERT INTO users (name, email, password_hash, role) VALUES (${name}, ${email}, ${hash}, 'admin') ON CONFLICT (email) DO NOTHING`;
 }
 
 async function seedCollaborators(q: NonNullable<typeof sql>) {

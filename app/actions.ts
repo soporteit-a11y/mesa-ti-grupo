@@ -2,6 +2,28 @@
 
 import { sql, ensureSchema } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { verifyPassword } from "@/lib/password";
+import { createSessionCookie, clearSessionCookie } from "@/lib/auth";
+
+export async function login(formData: FormData) {
+  await ensureSchema();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("password") || "");
+  if (!email || !password) redirect("/login?error=1");
+
+  const rows = await sql!`SELECT id, password_hash, role FROM users WHERE lower(email) = ${email}`;
+  const user = rows[0] as { id: number; password_hash: string; role: string } | undefined;
+  if (!user || !verifyPassword(password, user.password_hash)) redirect("/login?error=1");
+
+  await createSessionCookie(user!.id);
+  redirect(user!.role === "admin" ? "/" : "/mis-tickets");
+}
+
+export async function logout() {
+  await clearSessionCookie();
+  redirect("/login");
+}
 
 export async function createTicket(formData: FormData) {
   await ensureSchema();

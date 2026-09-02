@@ -69,6 +69,17 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 .nav-badge.crit { background: var(--crit); color: #0A0E15; }
 .nav-badge.warn { background: var(--high); color: #0A0E15; }
 
+/* ---------- Login ---------- */
+.auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.auth-card { width: 100%; max-width: 360px; padding: 28px 26px; display: flex; flex-direction: column; gap: 18px; }
+.auth-brand { display: flex; align-items: center; gap: 10px; }
+.auth-brand .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); object-fit: contain; padding: 5px; box-sizing: border-box; }
+.auth-brand .bt { font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: .02em; line-height: 1.1; }
+.auth-brand .bs { font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); letter-spacing: .04em; }
+.auth-title { font-size: 1.1rem; }
+.auth-error { font-size: 12.5px; color: var(--crit); background: var(--crit-w); border: 1px solid var(--crit); border-radius: var(--radius-sm); padding: 8px 10px; margin: 0; }
+.auth-submit { width: 100%; justify-content: center; }
+
 /* Texto solo para lectores de pantalla */
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -344,7 +355,7 @@ dialog.ticket-detail { max-width: 640px; }
 /* ---------- Forms / dialog ---------- */
 .form-grid { display: grid; gap: 14px; }
 .field label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 6px; }
-input[type=text], input[type=range], textarea, select {
+input[type=text], input[type=email], input[type=password], input[type=range], textarea, select {
   width: 100%; font-family: var(--font-sans); font-size: 14px; color: var(--ink);
   background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 9px 11px;
 }
