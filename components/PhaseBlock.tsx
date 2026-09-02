@@ -17,11 +17,13 @@ export function fmtRango(ini: string | null, fin: string | null): string | null 
 }
 
 export function PhaseBlock({
-  initiativeId, phase, color, canEdit, canCheck,
+  initiativeId, phase, color, canEdit, canCheck, numero,
 }: {
   initiativeId: number;
   phase: Phase;
   color: string;
+  /** Posicion de la fase dentro del cronograma, empezando en 1. */
+  numero: number;
   /** Admin: puede renombrar la fase, cambiar fechas, agregar y borrar tareas. */
   canEdit: boolean;
   /** Puede marcar tareas como completadas. */
@@ -43,7 +45,7 @@ export function PhaseBlock({
     <Collapsible
       storageKey={`fase.${phase.id}`}
       className={"phase-block" + (completa ? " completa" : "")}
-      head={<PhaseHeader phase={phase} rango={rango} canEdit={canEdit} />}
+      head={<PhaseHeader phase={phase} rango={rango} canEdit={canEdit} numero={numero} />}
       meta={barra}
     >
       {barra}

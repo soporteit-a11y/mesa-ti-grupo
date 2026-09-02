@@ -11,9 +11,11 @@ import type { Phase } from "@/lib/data";
  * querer al leer un cronograma largo.
  */
 export function PhaseHeader({
-  phase, rango, canEdit,
+  phase, rango, canEdit, numero,
 }: {
   phase: Phase; rango: string | null; canEdit: boolean;
+  /** Posicion de la fase dentro del cronograma, empezando en 1. */
+  numero: number;
 }) {
   const [editando, setEditando] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -22,7 +24,10 @@ export function PhaseHeader({
     return (
       <div className="phase-head">
         <div className="phase-id">
-          <span className="phase-title">{phase.title}</span>
+          <span className="phase-title">
+            <span className="phase-num">Fase {numero}</span>
+            {phase.title}
+          </span>
           {phase.context ? <span className="phase-ctx" title={phase.context}>{phase.context}</span> : null}
         </div>
         <div className="phase-meta">

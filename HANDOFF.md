@@ -524,6 +524,28 @@ render, porque leer `localStorage` al renderizar rompe la hidratación (servidor
 pintarían cosas distintas). Los accesos van en `try/catch`: en navegación privada `localStorage`
 puede lanzar y eso no debe tumbar la página.
 
+**Las fases van numeradas** ("Fase 1", "Fase 2"…) por su posición dentro del cronograma. El número
+se calcula en el render a partir del índice, no se guarda en la base: si reordenas o borras una
+fase, la numeración se recalcula sola en vez de quedar con huecos.
+
+**Tres vistas, conmutables por `?vista=`** (`lista` por defecto, `gantt`, `linea`):
+
+| Vista | Para qué sirve |
+|---|---|
+| **Lista** | Trabajar: marcar tareas, editar fases, agregar cosas. |
+| **Gantt** | Ver el **solape** entre fases de un vistazo, sobre una línea de tiempo horizontal. |
+| **Línea de tiempo** | Leer el proyecto como una **historia de principio a fin**: cuánto duró cada fase, qué se hizo en ella y en qué punto va. |
+
+Gantt y Línea de tiempo no son lo mismo con otra pintura: el Gantt responde "¿qué pasa a la vez?"
+y la línea de tiempo responde "¿cuánto llevamos y cuánto falta?". La línea de tiempo incluye un
+resumen con duración total, días transcurridos, días restantes y **avance real contra avance
+esperado** — si el porcentaje de tareas hechas va por debajo del porcentaje de tiempo consumido,
+el número se pinta en rojo. Ese contraste es el que dice si el proyecto va atrasado, y no se ve en
+ninguna otra vista.
+
+La clave de `localStorage` del plegado **incluye la vista** (`crono.<vista>.<id>`): lo que plieges
+en Lista no debe plegarse también en Gantt, donde el gráfico es justamente lo que quieres ver.
+
 **El Gantt** (`components/GanttChart.tsx`) está hecho a mano con posicionamiento porcentual, sin
 librerías, igual que las donas y barras del dashboard. Dibuja una barra por fase, con relleno
 proporcional al avance, marca del día de hoy (calculado en zona de RD, §5.8) y borde rojo en las

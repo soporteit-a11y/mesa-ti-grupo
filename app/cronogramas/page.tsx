@@ -11,6 +11,7 @@ import { AddTaskForm } from "@/components/AddTaskForm";
 import { AddPhaseForm } from "@/components/AddPhaseForm";
 import { PhaseBlock, fmtRango } from "@/components/PhaseBlock";
 import { GanttChart } from "@/components/GanttChart";
+import { Timeline } from "@/components/Timeline";
 import { Collapsible, ExpandirTodo } from "@/components/Collapsible";
 import { InitiativeStatusControl } from "@/components/InitiativeStatusControl";
 import { InitiativeTitle } from "@/components/InitiativeTitle";
@@ -56,7 +57,10 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
   }
 
   const f = searchParams || {};
-  const gantt = f.vista === "gantt";
+  const vista = f.vista === "gantt" || f.vista === "linea" ? f.vista : "lista";
+  const gantt = vista === "gantt";
+  const linea = vista === "linea";
+  const compacta = gantt || linea;
   let rows = initiatives;
   if (f.company) rows = rows.filter((i) => i.company === f.company);
 
@@ -96,11 +100,12 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
         <div className="filters">
           <FiltersCompanyClient companies={companies} />
           <div className="vista-toggle">
-            <Link href={url(null)} className={"btn sm" + (gantt ? "" : " active")}>Lista</Link>
+            <Link href={url(null)} className={"btn sm" + (vista === "lista" ? " active" : "")}>Lista</Link>
             <Link href={url("gantt")} className={"btn sm" + (gantt ? " active" : "")}>Gantt</Link>
+            <Link href={url("linea")} className={"btn sm" + (linea ? " active" : "")}>Línea de tiempo</Link>
           </div>
-          {!gantt && <ExpandirTodo alcance="crono." etiqueta="cronogramas" />}
-          {!gantt && <ExpandirTodo alcance="fase." etiqueta="fases" />}
+          {!compacta && <ExpandirTodo alcance="crono." etiqueta="cronogramas" />}
+          {!compacta && <ExpandirTodo alcance="fase." etiqueta="fases" />}
           <span className="fcount">{rows.length} cronograma(s)</span>
         </div>
 
@@ -123,7 +128,7 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                 </span>
               </div>
 
-              <div className={gantt ? "grid" : "grid g2"}>
+              <div className={compacta ? "grid" : "grid g2"}>
                 {g.items.map((i: any) => {
                   const due = dueInfo(i.due_date, i.status);
                   const rango = fmtRango(i.start_date, i.due_date);
@@ -184,13 +189,16 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
 
                       {gantt ? (
                         <GanttChart initiative={i} />
+                      ) : linea ? (
+                        <Timeline initiative={i} />
                       ) : (
                         <>
-                          {i.phases.map((p: any) => (
+                          {i.phases.map((p: any, idx: number) => (
                             <PhaseBlock
                               key={p.id}
                               initiativeId={i.id}
                               phase={p}
+                              numero={idx + 1}
                               color={g.color}
                               canEdit={esAdmin}
                               canCheck={puedeMarcar}
@@ -223,10 +231,15 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                   return (
                     <article className="card init-card" key={i.id}>
                       <Collapsible
-                        storageKey={`crono.${i.id}`}
-                        // Los cronogramas con fases (los de SINCO, muy largos)
-                        // arrancan plegados; los planos y cortos, abiertos.
-                        defaultOpen={!conFases}
+                        // La clave incluye la vista: lo que pliegues en Lista no
+                        // debe plegarse tambien en Gantt, donde el grafico es
+                        // justamente lo que quieres ver.
+                        storageKey={`crono.${vista}.${i.id}`}
+                        // En Gantt y Linea de tiempo el contenido es el grafico,
+                        // asi que se abren. En Lista, los cronogramas con fases
+                        // (los de SINCO, muy largos) arrancan plegados y los
+                        // planos y cortos, abiertos.
+                        defaultOpen={compacta || !conFases}
                         head={cabecera}
                         meta={barra}
                       >
