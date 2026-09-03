@@ -41,6 +41,12 @@ export function UserMenu({
   }, [open]);
 
   const esAdmin = role === "admin";
+  const rolInfo =
+    role === "admin"
+      ? { clase: "admin", etiqueta: "Super admin" }
+      : role === "viewer"
+      ? { clase: "viewer", etiqueta: "Visualizador" }
+      : { clase: "agent", etiqueta: "Colaborador" };
 
   return (
     <div className="usermenu" ref={wrapRef}>
@@ -72,9 +78,7 @@ export function UserMenu({
           <div className="usermenu-rows">
             <div className="usermenu-row">
               <span className="usermenu-k">Rol</span>
-              <span className={"role-pill " + (esAdmin ? "admin" : "agent")}>
-                {esAdmin ? "Super admin" : "Colaborador"}
-              </span>
+              <span className={"role-pill " + rolInfo.clase}>{rolInfo.etiqueta}</span>
             </div>
             <div className="usermenu-row">
               <span className="usermenu-k">Empresas</span>

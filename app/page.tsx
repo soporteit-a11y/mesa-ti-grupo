@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { hasDb } from "@/lib/db";
 import { getSupportDashboard } from "@/lib/data";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, roleHome } from "@/lib/auth";
 import { Setup } from "@/components/Setup";
 import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { drDayMonth, drYear, fmtDateTimeDR, fmtDuration } from "@/lib/dates";
@@ -44,7 +44,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Re
   // la pagina no debe depender solo de eso.
   const me = await getCurrentUser();
   if (!me) redirect("/login");
-  if (me.role !== "admin") redirect("/mis-tickets");
+  if (me.role !== "admin") redirect(roleHome(me.role));
 
   const from = searchParams?.from || null;
   const to = searchParams?.to || null;

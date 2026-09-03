@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { hasDb } from "@/lib/db";
 import { getCompanies, getCategories, getCollaborators, getCanned, getUsers, getRegistroAbierto } from "@/lib/data";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, roleHome } from "@/lib/auth";
 import { Setup } from "@/components/Setup";
 import { SlaInput } from "@/components/SlaInput";
 import {
@@ -21,7 +21,7 @@ export default async function ConfigPage() {
   // pero si algun dia cambia su matcher la pagina no debe quedar expuesta.
   const me = await getCurrentUser();
   if (!me) redirect("/login");
-  if (me.role !== "admin") redirect("/mis-tickets");
+  if (me.role !== "admin") redirect(roleHome(me.role));
 
   let companies: any[], categories: any[], collaborators: any[], canned: any[], users: any[];
   let registroAbierto: boolean;
@@ -140,38 +140,44 @@ export default async function ConfigPage() {
                     <select name="role" defaultValue={u.role} className="cfg-role-select">
                       <option value="admin">Super admin</option>
                       <option value="agent">Colaborador</option>
+                      <option value="viewer">Visualizador</option>
                     </select>
                     <input type="password" name="password" placeholder="Nueva clave (opcional)" className="cfg-contact-input" autoComplete="new-password" />
                     <button type="submit" className="btn sm" title="Guardar">✓</button>
                   </div>
                   {u.role !== "admin" && (
-                    <>
-                      <div className="cfg-user-companies">
-                        <span className="cfg-user-clabel">Empresas visibles</span>
-                        {companies.map((co) => (
-                          <label className="cfg-chk" key={co.id}>
-                            <input
-                              type="checkbox"
-                              name="company_ids"
-                              value={co.id}
-                              defaultChecked={u.company_ids.includes(co.id)}
-                            />
-                            {co.name}
-                          </label>
-                        ))}
-                      </div>
-                      <div className="cfg-user-companies">
-                        <span className="cfg-user-clabel">Permisos</span>
-                        <label className="cfg-chk">
-                          <input type="checkbox" name="can_edit_schedule" defaultChecked={u.can_edit_schedule} />
-                          Puede marcar tareas en cronogramas
+                    <div className="cfg-user-companies">
+                      <span className="cfg-user-clabel">Empresas visibles</span>
+                      {companies.map((co) => (
+                        <label className="cfg-chk" key={co.id}>
+                          <input
+                            type="checkbox"
+                            name="company_ids"
+                            value={co.id}
+                            defaultChecked={u.company_ids.includes(co.id)}
+                          />
+                          {co.name}
                         </label>
-                        <label className="cfg-chk">
-                          <input type="checkbox" name="can_create_tickets" defaultChecked={u.can_create_tickets} />
-                          Puede reportar tickets
-                        </label>
-                      </div>
-                    </>
+                      ))}
+                    </div>
+                  )}
+                  {u.role === "agent" && (
+                    <div className="cfg-user-companies">
+                      <span className="cfg-user-clabel">Permisos</span>
+                      <label className="cfg-chk">
+                        <input type="checkbox" name="can_edit_schedule" defaultChecked={u.can_edit_schedule} />
+                        Puede marcar tareas en cronogramas
+                      </label>
+                      <label className="cfg-chk">
+                        <input type="checkbox" name="can_create_tickets" defaultChecked={u.can_create_tickets} />
+                        Puede reportar tickets
+                      </label>
+                    </div>
+                  )}
+                  {u.role === "viewer" && (
+                    <div className="cfg-user-companies">
+                      <span className="pv-meta">Solo ve los cronogramas de sus empresas — no puede marcar tareas ni reportar tickets.</span>
+                    </div>
                   )}
                   {u.role === "admin" && (
                     <div className="cfg-user-companies">
@@ -204,6 +210,7 @@ export default async function ConfigPage() {
             <input type="email" name="email" placeholder="Correo" required />
             <select name="role" defaultValue="agent" className="cfg-role-select">
               <option value="agent">Colaborador</option>
+              <option value="viewer">Visualizador</option>
               <option value="admin">Super admin</option>
             </select>
             <input type="password" name="password" placeholder="Contraseña" required autoComplete="new-password" />
@@ -217,7 +224,7 @@ export default async function ConfigPage() {
               ))}
             </div>
             <div className="cfg-user-companies">
-              <span className="cfg-user-clabel">Permisos</span>
+              <span className="cfg-user-clabel">Permisos (solo si el rol es Colaborador)</span>
               <label className="cfg-chk">
                 <input type="checkbox" name="can_edit_schedule" defaultChecked />
                 Puede marcar tareas en cronogramas
@@ -230,10 +237,12 @@ export default async function ConfigPage() {
             <button type="submit" className="btn primary sm">Crear cuenta</button>
           </form>
           <p className="pv-meta" style={{ marginTop: 2 }}>
-            Un <b>colaborador</b> ve solo los cronogramas de las empresas que le marques, y sus propios
-            tickets. Con los permisos decides si además puede <b>marcar tareas</b> (si no, las ve pero no
-            las toca) y si puede <b>reportar tickets</b>. Deja la clave vacía al editar para no cambiarla.
-            No puedes eliminar ni desactivar tu propia cuenta, ni dejar el sistema sin ningún super admin.
+            Un <b>colaborador</b> ve los cronogramas de las empresas que le marques y sus propios tickets;
+            con los permisos decides si además puede <b>marcar tareas</b> y <b>reportar tickets</b>. Un
+            <b> visualizador</b> solo puede ver los cronogramas de sus empresas — nunca marca tareas ni
+            reporta tickets, así que esos dos permisos no le aplican aunque queden marcados. Deja la
+            clave vacía al editar para no cambiarla. No puedes eliminar ni desactivar tu propia cuenta,
+            ni dejar el sistema sin ningún super admin.
           </p>
         </div>
 

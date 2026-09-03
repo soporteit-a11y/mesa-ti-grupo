@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { hasDb } from "@/lib/db";
 import { getTickets, getCompanies, getCollaborators, getCategories, getTicketDetail, getCanned } from "@/lib/data";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, roleHome } from "@/lib/auth";
 import { Setup } from "@/components/Setup";
 import { NewTicketDialog } from "@/components/NewTicketDialog";
 import { CollaboratorsDialog } from "@/components/CollaboratorsDialog";
@@ -34,7 +34,7 @@ export default async function TicketsPage({ searchParams }: { searchParams: Reco
   // la pagina no debe depender solo de eso.
   const me = await getCurrentUser();
   if (!me) redirect("/login");
-  if (me.role !== "admin") redirect("/mis-tickets");
+  if (me.role !== "admin") redirect(roleHome(me.role));
 
   let tickets: any[], companies: any[], collaborators: any[], cats: any[], canned: any[];
   try {

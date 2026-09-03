@@ -342,11 +342,20 @@ porque ahí el objetivo es el detalle completo, no un resumen.
 
 ### 5.11 Autenticación — login con roles
 
-Hasta esta tanda, Mesa TI no tenía **ningún** tipo de login: cualquiera con la URL de producción
-podía ver y editar todo, incluyendo `/config`. Se está agregando un sistema de cuentas con dos
-roles: **admin** (Eddy, ve y edita todo, igual que hoy) y **agent** (el resto del personal, que
-solo podrá crear tickets, ver los que él mismo creó, y ver/marcar tareas de la ruta de CMG — esa
-parte todavía no está implementada, ver más abajo).
+Hasta que se empezó esta parte, Mesa TI no tenía **ningún** tipo de login: cualquiera con la URL
+de producción podía ver y editar todo, incluyendo `/config`. Ahora hay tres roles (columna
+`users.role`, `TEXT` sin restricción — los valores válidos los impone la aplicación, no la base):
+
+| Rol | Ve / hace |
+|---|---|
+| **`admin`** | Todo, sin restricción — dashboard, mesa de ayuda completa, cronogramas de todas las empresas, `/config`. |
+| **`agent`** ("Colaborador") | Crea tickets y ve los que él creó (`/mis-tickets`); ve los cronogramas de las empresas que tenga asignadas y, si tiene el permiso `can_edit_schedule`, marca sus tareas. Sin acceso a `/`, `/tickets` ni `/config`. |
+| **`viewer`** ("Visualizador", agregado en la tanda 9) | Solo ve los cronogramas de sus empresas asignadas, en modo consulta — **nunca** marca tareas ni reporta tickets, sin excepción. No tiene ni el link "Mis reportes" en el menú. |
+
+`getVisibleCompanyIds()` (`lib/data.ts`) trata `agent` y `viewer` igual (ambos filtran por
+`user_companies`); lo que los distingue es exclusivamente qué pueden **hacer** dentro de eso.
+`roleHome()` (`lib/auth.ts`) centraliza a dónde va cada rol tras iniciar sesión o al pedir una
+ruta ajena — ver el detalle del rol `viewer` en la entrada de la tanda 9 del §14.
 
 **Por qué se entregó en dos pasos.** Agregar autenticación sobre una app en producción con datos
 reales es un cambio de superficie de seguridad: si el middleware que bloquea rutas tiene un error,
@@ -1161,6 +1170,46 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 2 de septiembre de 2026 (tanda 9) — Tercer rol: Visualizador
+
+El usuario pidió, en la sección de perfiles, "otro perfil que sea solo para visualizador: solo
+verá las etapas pero no puede marcar". Es un **rol propio**, no una casilla más dentro de
+Colaborador: cambia la navegación (sin "Mis reportes"), el destino tras iniciar sesión, y no debe
+poder reportar tickets ni marcar tareas bajo ninguna circunstancia.
+
+- **`role` pasa a tener tres valores:** `'admin' | 'agent' | 'viewer'`. La columna en `users` sigue
+  siendo `TEXT` sin restricción — no hizo falta ninguna migración de esquema, solo lógica de
+  aplicación. `app/actions.ts` gana `parseRole(formData)` para no repetir el `=== "admin" ? ... :
+  ...` de dos valores en `createUser`/`updateUser`.
+- **Los permisos `can_edit_schedule`/`can_create_tickets` se fuerzan a `false` para cualquier rol
+  que no sea `'agent'`**, sin importar qué venga marcado en el formulario — tanto al crear como al
+  editar. Son permisos que solo tienen sentido para un colaborador; forzarlos server-side (no solo
+  ocultando las casillas en la interfaz) es lo que garantiza que un visualizador nunca pueda marcar
+  ni reportar, así alguien manipule el formulario a mano.
+- **`lib/auth.ts` gana `roleHome(role)`**: centraliza a dónde va cada rol (`admin` → `/`, `viewer`
+  → `/cronogramas`, `agent` → `/mis-tickets`). Se usa en `login`, y en las páginas admin-only que
+  ya redirigían por "defensa en profundidad" (antes todas apuntaban a `/mis-tickets` a secas,
+  aunque el usuario fuera visualizador). **`middleware.ts` no puede importar esta función** (no es
+  edge-safe, ver la tabla de runtimes en §5.11) — tiene su propia copia `inicioDe()`, documentada
+  como duplicado a propósito: si cambias el mapeo de roles, hay que cambiarlo en los dos sitios.
+- **El visualizador no puede visitar `/mis-tickets`.** No tiene sentido: nunca crea tickets, así
+  que nunca tiene ninguno propio que ver ahí. El middleware lo redirige a `/cronogramas`
+  (`SOLO_NO_VIEWER`), y la página lo repite como defensa en profundidad.
+- **`app/layout.tsx`:** tercera rama de navegación — el visualizador solo ve el link
+  "Cronogramas", ni siquiera "Mis reportes".
+- **`toggleTask`** (la única acción de cronogramas que un no-admin puede llamar) pasa de comprobar
+  solo `can_edit_schedule` a comprobar `role === "agent" && can_edit_schedule`: así un visualizador
+  queda bloqueado por el rol mismo, no solo por el valor de una columna que en teoría siempre
+  debería estar en `false` para él pero que ahora tiene dos capas de protección en vez de una.
+  Lo mismo en `app/cronogramas/page.tsx` (`puedeMarcar`), para que la interfaz coincida con lo que
+  el servidor realmente permite.
+- **`/config`:** el `<select>` de rol gana la opción "Visualizador". La fila de cada usuario
+  muestra "Empresas visibles" para cualquier no-admin (agente o visualizador — ambos necesitan
+  saber qué empresas ven), pero el bloque "Permisos" (las dos casillas) **solo aparece si el rol
+  es `agent`** — mostrárselas a un visualizador sería confuso, ya que no le aplican.
+- **`components/UserMenu.tsx`:** la insignia de rol en el menú de perfil distingue los tres casos
+  ("Super admin" / "Colaborador" / "Visualizador"), con su propio color (`.role-pill.viewer`).
 
 ### 2 de septiembre de 2026 (tanda 8) — Las etapas viven dentro del resumen, no debajo
 

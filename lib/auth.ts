@@ -62,3 +62,14 @@ export async function requireAdmin(): Promise<boolean> {
   const user = await getCurrentUser();
   return user?.role === "admin";
 }
+
+/**
+ * A donde va cada rol despues de entrar, o cuando pide una ruta que no le
+ * corresponde. Centralizado aqui para no repetir el mapeo (login, middleware,
+ * y las paginas admin-only que redirigen en defensa de profundidad).
+ */
+export function roleHome(role: string): string {
+  if (role === "admin") return "/";
+  if (role === "viewer") return "/cronogramas";
+  return "/mis-tickets";
+}

@@ -16,6 +16,10 @@ export default async function MisTicketsPage({ searchParams }: { searchParams: R
 
   const me = await getCurrentUser();
   if (!me) redirect("/login");
+  // Defensa en profundidad: el middleware ya redirige al visualizador, pero la
+  // pagina no debe depender solo de eso. Un visualizador nunca reporta
+  // tickets, asi que esta pantalla no le sirve de nada.
+  if (me.role === "viewer") redirect("/cronogramas");
 
   let tickets: any[], companies: any[], collaborators: any[], cats: any[], canned: any[];
   try {

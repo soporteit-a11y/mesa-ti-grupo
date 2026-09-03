@@ -167,6 +167,7 @@ h1, h2, h3, h4 { margin: 0; letter-spacing: -.01em; }
 }
 .role-pill.admin { color: var(--accent-ink); background: var(--accent-wash); border-color: var(--accent); }
 .role-pill.agent { color: var(--info); background: var(--surface-2); border-color: var(--line-strong); }
+.role-pill.viewer { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
 
 .topbar {
   display: flex; align-items: center; gap: 16px; padding: 16px 28px;

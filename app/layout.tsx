@@ -39,6 +39,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   }
 
   const esAdmin = user.role === "admin";
+  const esVisualizador = user.role === "viewer";
 
   // Contador de avisos del menu. Nunca debe tumbar el layout: si la base no
   // esta conectada o la consulta falla, se muestra sin insignia.
@@ -94,6 +95,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   <NavLink href="/cronogramas" label="Cronogramas" icon="route" />
                   <NavLink href="/config" label="Configuración" icon="settings" />
                 </>
+              ) : esVisualizador ? (
+                // El visualizador no reporta tickets: solo tiene sentido que
+                // vea cronogramas, asi que es el unico link que le aparece.
+                <NavLink href="/cronogramas" label="Cronogramas" icon="route" />
               ) : (
                 <>
                   <NavLink href="/mis-tickets" label="Mis reportes" icon="inbox" />

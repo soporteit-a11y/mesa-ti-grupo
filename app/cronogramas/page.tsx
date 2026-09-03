@@ -41,7 +41,9 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
   const me = await getCurrentUser();
   if (!me) redirect("/login");
   const esAdmin = me.role === "admin";
-  const puedeMarcar = esAdmin || me.can_edit_schedule;
+  // Explicito por rol, no solo por el flag: un visualizador nunca marca,
+  // aunque por algun motivo can_edit_schedule quedara en true en su fila.
+  const puedeMarcar = esAdmin || (me.role === "agent" && me.can_edit_schedule);
 
   let initiatives: any[], companies: any[], visibles: number[] | null;
   try {

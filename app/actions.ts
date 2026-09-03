@@ -4,7 +4,7 @@ import { sql, ensureSchema } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { verifyPassword, hashPassword } from "@/lib/password";
-import { createSessionCookie, clearSessionCookie, getCurrentUser, requireAdmin } from "@/lib/auth";
+import { createSessionCookie, clearSessionCookie, getCurrentUser, requireAdmin, roleHome } from "@/lib/auth";
 import { getRegistroAbierto } from "@/lib/data";
 
 export async function login(formData: FormData) {
@@ -23,7 +23,7 @@ export async function login(formData: FormData) {
   if (!user!.approved) redirect("/login?pendiente=1");
 
   await createSessionCookie(user!.id);
-  redirect(user!.role === "admin" ? "/" : "/mis-tickets");
+  redirect(roleHome(user!.role));
 }
 
 /**
@@ -56,6 +56,16 @@ export async function logout() {
   redirect("/login");
 }
 
+/**
+ * Rol valido a partir del formulario. Solo tres valores existen; cualquier
+ * otra cosa cae en "agent" en vez de fallar, igual que el resto de las
+ * acciones de este archivo tratan un dato invalido (silencioso, no un error).
+ */
+function parseRole(formData: FormData): "admin" | "agent" | "viewer" {
+  const raw = String(formData.get("role") || "agent");
+  return raw === "admin" || raw === "viewer" ? raw : "agent";
+}
+
 // Guarda las empresas asignadas a un usuario. Se llama desde createUser y
 // updateUser; el admin no necesita filas aqui porque siempre ve todas.
 async function saveUserCompanies(userId: number, formData: FormData) {
@@ -72,9 +82,13 @@ export async function createUser(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
-  const role = String(formData.get("role") || "agent") === "admin" ? "admin" : "agent";
-  const canEdit = formData.get("can_edit_schedule") != null;
-  const canTicket = formData.get("can_create_tickets") != null;
+  const role = parseRole(formData);
+  // Estos dos permisos solo significan algo para un colaborador: el admin los
+  // ignora (ve y hace todo) y el visualizador nunca debe marcar ni reportar,
+  // asi que se fuerzan a false sin importar que haya llegado marcado en el
+  // formulario.
+  const canEdit = role === "agent" && formData.get("can_edit_schedule") != null;
+  const canTicket = role === "agent" && formData.get("can_create_tickets") != null;
   if (!name || !email || !password) return;
 
   const rows = await sql!`INSERT INTO users (name, email, password_hash, role, approved, can_edit_schedule, can_create_tickets)
@@ -122,9 +136,9 @@ export async function updateUser(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
-  const role = String(formData.get("role") || "agent") === "admin" ? "admin" : "agent";
-  const canEdit = formData.get("can_edit_schedule") != null;
-  const canTicket = formData.get("can_create_tickets") != null;
+  const role = parseRole(formData);
+  const canEdit = role === "agent" && formData.get("can_edit_schedule") != null;
+  const canTicket = role === "agent" && formData.get("can_create_tickets") != null;
   if (!id || !name || !email) return;
 
   // No dejar el sistema sin ningun admin: si este era el ultimo y se le quita
@@ -444,10 +458,10 @@ export async function createInitiative(formData: FormData) {
 }
 
 /**
- * Unica accion de rutas que un agente puede ejecutar. El admin marca cualquier
- * tarea; el agente solo las de empresas que tiene asignadas en /config, y la
- * comprobacion va dentro del propio UPDATE para que no exista ventana entre
- * verificar y escribir.
+ * Unica accion de rutas que un colaborador puede ejecutar (el visualizador
+ * nunca). El admin marca cualquier tarea; el colaborador solo las de empresas
+ * que tiene asignadas en /config, y la comprobacion va dentro del propio
+ * UPDATE para que no exista ventana entre verificar y escribir.
  */
 export async function toggleTask(formData: FormData) {
   await ensureSchema();
@@ -458,8 +472,8 @@ export async function toggleTask(formData: FormData) {
 
   if (me.role === "admin") {
     await sql!`UPDATE initiative_tasks SET done = NOT done WHERE id = ${id}`;
-  } else if (!me.can_edit_schedule) {
-    return; // permiso de solo lectura sobre cronogramas
+  } else if (me.role !== "agent" || !me.can_edit_schedule) {
+    return; // visualizador, o colaborador sin ese permiso: solo lectura
   } else {
     await sql!`
       UPDATE initiative_tasks t SET done = NOT t.done
