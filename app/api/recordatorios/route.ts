@@ -21,12 +21,21 @@ export const dynamic = "force-dynamic";
  * vez volveria a escribirle a todo el mundo.
  */
 export async function GET(req: Request) {
+  // Falla cerrado: sin CRON_SECRET no se atiende a nadie.
+  //
+  // La tentacion es "si no hay secreto, dejar pasar", y es justo al reves: esta
+  // ruta dispara correos a todo el personal y no esta detras del login (el cron
+  // no trae cookie). Sin secreto seria un boton de envio masivo publico, y de
+  // paso contaria a cualquiera cuanto trabajo hay vencido.
   const secreto = process.env.CRON_SECRET;
-  if (secreto) {
-    const auth = req.headers.get("authorization");
-    if (auth !== `Bearer ${secreto}`) {
-      return NextResponse.json({ error: "no autorizado" }, { status: 401 });
-    }
+  if (!secreto) {
+    return NextResponse.json(
+      { error: "CRON_SECRET no configurada; la ruta queda cerrada a proposito" },
+      { status: 503 },
+    );
+  }
+  if (req.headers.get("authorization") !== `Bearer ${secreto}`) {
+    return NextResponse.json({ error: "no autorizado" }, { status: 401 });
   }
 
   await ensureSchema();
