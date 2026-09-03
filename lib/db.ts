@@ -112,6 +112,18 @@ async function init(q: NonNullable<typeof sql>) {
   )`;
 
   // Migracion para BD existente (tickets antiguos con columnas NOT NULL)
+  // Fecha en que la tarea se hizo DE VERDAD, frente a end_date, que es la fecha
+  // en que se coordino. Tener las dos es lo que permite medir el atraso real:
+  // sin done_at solo se sabe que algo esta hecho, no si llego tarde.
+  //
+  // Se rellena sola al marcar la tarea (ver toggleTask) y se puede corregir a
+  // mano, porque marcar en el sistema y hacer el trabajo no siempre pasan el
+  // mismo dia.
+  await q`ALTER TABLE initiative_tasks ADD COLUMN IF NOT EXISTS done_at DATE`;
+  // Las tareas que ya estaban marcadas antes de existir esta columna no tienen
+  // fecha real y no se la puede inventar: quedan en NULL y se muestran como
+  // "sin fecha" en vez de mentir con la fecha de hoy o con la coordinada.
+
   // Usuario del sistema asignado. Va aqui abajo, separado del resto de
   // columnas de initiative_*, porque apunta a users(id) y esa tabla se crea
   // despues: una FK no puede referenciar una tabla que todavia no existe.

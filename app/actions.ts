@@ -7,6 +7,7 @@ import { randomBytes } from "crypto";
 import { verifyPassword, hashPassword } from "@/lib/password";
 import { createSessionCookie, clearSessionCookie, getCurrentUser, getSessionToken, requireAdmin, roleHome } from "@/lib/auth";
 import { getRegistroAbierto } from "@/lib/data";
+import { hoyEnRD } from "@/lib/dates";
 import { sendEmail, baseUrl, emailConfigurado, emailRestablecer, emailBienvenida, emailCuentaAprobada } from "@/lib/email";
 
 export async function login(formData: FormData) {
@@ -600,20 +601,37 @@ export async function createInitiative(formData: FormData) {
  * que tiene asignadas en /config, y la comprobacion va dentro del propio
  * UPDATE para que no exista ventana entre verificar y escribir.
  */
+/**
+ * Marca o desmarca una tarea, y de paso lleva la cuenta de CUANDO se hizo.
+ *
+ * Al marcarla se graba done_at = hoy, que es la suposicion correcta el 99% de
+ * las veces y evita tener que rellenar una fecha a mano en cada clic; si el
+ * trabajo se hizo otro dia, se corrige con setTaskDoneAt. Al desmarcarla se
+ * borra: una tarea que no esta hecha no tiene fecha de realizacion.
+ *
+ * La fecha se calcula en la zona de RD, no en UTC. Con UTC, marcar algo a las
+ * 9 de la noche lo fecharia al dia siguiente.
+ */
 export async function toggleTask(formData: FormData) {
   await ensureSchema();
   const id = Number(formData.get("id"));
   if (!id) return;
   const me = await getCurrentUser();
   if (!me) return;
+  const hoy = hoyEnRD();
 
   if (me.role === "admin") {
-    await sql!`UPDATE initiative_tasks SET done = NOT done WHERE id = ${id}`;
+    await sql!`UPDATE initiative_tasks
+      SET done = NOT done,
+          done_at = CASE WHEN NOT done THEN ${hoy}::date ELSE NULL END
+      WHERE id = ${id}`;
   } else if (me.role !== "agent" || !me.can_edit_schedule) {
     return; // visualizador, o colaborador sin ese permiso: solo lectura
   } else {
     await sql!`
-      UPDATE initiative_tasks t SET done = NOT t.done
+      UPDATE initiative_tasks t
+      SET done = NOT t.done,
+          done_at = CASE WHEN NOT t.done THEN ${hoy}::date ELSE NULL END
       FROM initiatives i
       WHERE t.id = ${id} AND i.id = t.initiative_id
         AND EXISTS (
@@ -623,6 +641,25 @@ export async function toggleTask(formData: FormData) {
   }
   revalidatePath("/cronogramas");
   revalidatePath("/");
+}
+
+/**
+ * Corrige la fecha real de una tarea ya marcada. Marcar en el sistema y hacer
+ * el trabajo no siempre pasan el mismo dia, y el atraso se mide contra esta
+ * fecha, asi que tiene que poder ajustarse.
+ *
+ * Vaciar el campo deja la fecha en NULL — "hecha, pero no se sabe cuando" —
+ * que es justo el estado de las tareas que ya estaban marcadas antes de que
+ * existiera la columna. No se inventa una fecha para taparlo.
+ */
+export async function setTaskDoneAt(formData: FormData) {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+  const id = Number(formData.get("id"));
+  if (!id) return;
+  const done_at = String(formData.get("done_at") || "") || null;
+  await sql!`UPDATE initiative_tasks SET done_at = ${done_at} WHERE id = ${id} AND done = true`;
+  revalidatePath("/cronogramas");
 }
 
 export async function addTask(formData: FormData) {

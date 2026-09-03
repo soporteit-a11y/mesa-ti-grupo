@@ -4,16 +4,22 @@ import { useRef, useState } from "react";
 import { toggleTask, updateTaskTitle, deleteTask } from "@/app/actions";
 import { TaskOwner } from "@/components/TaskOwner";
 import { Asignado, type OpcionUsuario } from "@/components/Asignado";
+import { TaskFechas } from "@/components/TaskFechas";
 
 export function TaskItem({
-  id, done, title, locked = false, readOnly = false, context, fecha, owner, responsables = [], canEditOwner = false,
+  id, done, title, locked = false, readOnly = false, context, owner, responsables = [], canEditOwner = false,
   asignadoId = null, asignadoNombre = null, asignables = [],
+  coordinada = null, realizada = null, hoy,
 }: {
   id: number; done: boolean; title: string;
   /** Sub-grupo del Excel del que venia la tarea. Solo informativo. */
   context?: string | null;
-  /** Fecha planificada, ya formateada. */
-  fecha?: string | null;
+  /** Fecha coordinada (comprometida) de la tarea, sin formatear. */
+  coordinada?: unknown;
+  /** Fecha en que se realizo de verdad, sin formatear. */
+  realizada?: unknown;
+  /** Hoy en dias desde epoch, calculado en el servidor. */
+  hoy: number;
   /** Responsable de la tarea. */
   owner?: string | null;
   /** Valores de responsable ya usados, para el autocompletado. */
@@ -90,7 +96,14 @@ export function TaskItem({
 
       <TaskOwner id={id} owner={owner ?? null} sugerencias={responsables} canEdit={canEditOwner} />
 
-      {fecha ? <span className="task-fecha mono">{fecha}</span> : null}
+      <TaskFechas
+        id={id}
+        coordinada={coordinada}
+        realizada={realizada}
+        done={done}
+        hoy={hoy}
+        canEdit={canEditOwner}
+      />
 
       {!locked && (
         <form ref={deleteRef} action={deleteTask}>

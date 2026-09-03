@@ -9,7 +9,7 @@ import type { Phase } from "@/lib/data";
 export { fmtRangoFechas as fmtRango } from "@/lib/dates";
 
 export function PhaseBlock({
-  initiativeId, phase, color, canEdit, canCheck, numero, responsables = [], asignables = [],
+  initiativeId, phase, color, canEdit, canCheck, numero, responsables = [], asignables = [], hoy,
 }: {
   initiativeId: number;
   phase: Phase;
@@ -20,6 +20,8 @@ export function PhaseBlock({
   responsables?: string[];
   /** Usuarios que pueden ver esta empresa, para asignar fase y tareas. */
   asignables?: { id: number; name: string }[];
+  /** Hoy en dias desde epoch, calculado en el servidor. */
+  hoy?: number;
   /** Admin: puede renombrar la fase, cambiar fechas, agregar y borrar tareas. */
   canEdit: boolean;
   /** Puede marcar tareas como completadas. */
@@ -56,6 +58,7 @@ export function PhaseBlock({
           responsables={responsables}
           canEditOwner={canEdit}
           asignables={asignables}
+          hoy={hoy}
         />
       )}
       {canEdit && <AddTaskForm initiativeId={initiativeId} phaseId={phase.id} />}

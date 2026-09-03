@@ -42,10 +42,20 @@ export function diaDeFecha(v: unknown): number | null {
   return Number.isNaN(t) ? null : Math.floor(t / 86400000);
 }
 
+/**
+ * Hoy como 'YYYY-MM-DD' en la zona de Republica Dominicana.
+ *
+ * En UTC no vale: el servidor corre en UTC y RD va cuatro horas por detras, asi
+ * que todo lo que se marque despues de las 8 de la noche quedaria fechado al
+ * dia siguiente. Se usa 'en-CA' porque su formato corto ya es YYYY-MM-DD.
+ */
+export function hoyEnRD(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: DR_TZ }).format(new Date());
+}
+
 /** Hoy, en dias desde epoch, segun la zona de Republica Dominicana. */
 export function hoyEnDias(): number {
-  const f = new Intl.DateTimeFormat("en-CA", { timeZone: DR_TZ }).format(new Date());
-  return diaDeFecha(f)!;
+  return diaDeFecha(hoyEnRD())!;
 }
 
 const MES_CORTO = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];

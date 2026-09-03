@@ -20,6 +20,8 @@ import { InitiativeTitle } from "@/components/InitiativeTitle";
 import { InitiativeFechas } from "@/components/InitiativeFechas";
 import { DeleteInitiativeButton } from "@/components/DeleteInitiativeButton";
 import { FiltersCompanyClient } from "@/components/FiltersCompanyClient";
+import { AtrasoEtapa } from "@/components/AtrasoEtapa";
+import { calcularAtraso } from "@/lib/atraso";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +46,12 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
   // Explicito por rol, no solo por el flag: un visualizador nunca marca,
   // aunque por algun motivo can_edit_schedule quedara en true en su fila.
   const puedeMarcar = esAdmin || (me.role === "agent" && me.can_edit_schedule);
+
+  // Hoy se calcula UNA vez, en el servidor, y baja como prop a todo lo que lo
+  // necesite. Si cada componente cliente lo recalculara, el navegador y el
+  // servidor podrian caer en dias distintos (el servidor va en UTC) y la
+  // hidratacion pintaria cosas distintas.
+  const hoy = hoyEnDias();
 
   let initiatives: any[], companies: any[], visibles: number[] | null, asignables: any[];
   try {
@@ -165,6 +173,11 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                     (i.due_date && i.derivEnd && i.derivEnd > i.calcEnd!)
                   );
                   const due = dueInfo(i.calcEnd, i.status);
+                  // Retraso propio de ESTA etapa: se mide contra su calendario
+                  // y su avance, sin mezclarse con el de las demas.
+                  const atraso = calcularAtraso(
+                    i.calcStart, i.calcEnd, i.progress, hoy, i.phases, i.tasks,
+                  );
                   const conFases = i.phases.length > 0;
                   const cabecera = (
                     <>
@@ -196,6 +209,7 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                               <span className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>{rango}</span>
                             ) : null}
                             {due ? <span className={"sla-chip " + due.cls}>{due.label}</span> : null}
+                            <AtrasoEtapa atraso={atraso} />
                           </div>
                         </div>
                         <div className="init-actions">
@@ -244,6 +258,7 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                               canCheck={puedeMarcar}
                               responsables={responsables}
                               asignables={asignablesAqui}
+                              hoy={hoy}
                             />
                           ))}
 
@@ -262,6 +277,7 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                                 responsables={responsables}
                                 canEditOwner={esAdmin}
                                 asignables={asignablesAqui}
+                                hoy={hoy}
                               />
                             </div>
                           )}

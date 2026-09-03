@@ -262,7 +262,18 @@ export async function getSupportDashboard(from?: string | null, to?: string | nu
 export type Task = {
   id: number; title: string; done: boolean;
   phase_id: number | null;
+  /**
+   * Fechas COORDINADAS: cuando se acordo que la tarea empezaria y terminaria.
+   * Son el compromiso, no lo que paso.
+   */
   start_date: string | null; end_date: string | null;
+  /**
+   * Fecha en que la tarea se hizo DE VERDAD. Comparada con end_date es lo que
+   * dice si se llego tarde y por cuanto. Null en tareas sin marcar, y tambien
+   * en las que ya estaban marcadas antes de que existiera esta columna: ahi no
+   * se puede saber, y se dice que no se sabe.
+   */
+  done_at: string | null;
   /** Texto libre del Excel del proveedor: "SINCOSOFT", "MESSINA". */
   owner: string | null;
   context: string | null;
@@ -372,7 +383,7 @@ export async function getInitiatives(): Promise<Initiative[]> {
     ORDER BY p.position, p.id`;
   const tasks = await q`
     SELECT t.id, t.initiative_id, t.phase_id, t.title, t.done, t.start_date, t.end_date,
-           t.owner, t.context, t.assigned_user_id, u.name AS assigned_name
+           t.done_at, t.owner, t.context, t.assigned_user_id, u.name AS assigned_name
     FROM initiative_tasks t LEFT JOIN users u ON u.id = t.assigned_user_id
     ORDER BY t.position, t.id`;
 

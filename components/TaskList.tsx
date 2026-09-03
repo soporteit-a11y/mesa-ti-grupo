@@ -4,25 +4,28 @@ import { useEffect, useRef, useState } from "react";
 import { reorderTasks } from "@/app/actions";
 import { TaskItem } from "@/components/TaskItem";
 import { type OpcionUsuario } from "@/components/Asignado";
-import { fmtDiaMes } from "@/lib/dates";
+import { hoyEnDias } from "@/lib/dates";
 
 type Task = {
   id: number; done: boolean; title: string;
   context?: string | null; start_date?: string | null; end_date?: string | null;
+  done_at?: string | null;
   owner?: string | null;
   assigned_user_id?: number | null; assigned_name?: string | null;
 };
 
-/** Fecha corta de la tarea (la de fin, o la de inicio si no hay fin). */
-function fechaCorta(t: Task): string | null {
-  return fmtDiaMes(t.end_date || t.start_date);
-}
-
 export function TaskList({
   initiativeId, tasks, locked = false, readOnly = false, responsables = [], canEditOwner = false,
-  asignables = [],
+  asignables = [], hoy,
 }: {
   initiativeId: number; tasks: Task[];
+  /**
+   * Hoy en dias desde epoch, calculado UNA vez en el servidor y bajado como
+   * prop. Si cada tarea lo calculara en el navegador, el valor del servidor y
+   * el del cliente podrian caer en dias distintos (el servidor va en UTC) y la
+   * hidratacion no cuadraria.
+   */
+  hoy?: number;
   /** Rol colaborador: solo marcar/desmarcar. Sin reordenar, renombrar ni borrar. */
   locked?: boolean;
   /** Colaborador sin permiso de edicion: ni siquiera puede marcar. */
@@ -33,6 +36,9 @@ export function TaskList({
   /** Usuarios que pueden ver esta empresa, para asignar tareas. */
   asignables?: OpcionUsuario[];
 }) {
+  // Si nadie lo baja, se calcula aqui: peor para la hidratacion, pero mejor
+  // que romperse. Ningun sitio deberia dejarlo sin pasar.
+  const hoyEfectivo = hoy ?? hoyEnDias();
   const [items, setItems] = useState<Task[]>(tasks);
   const dragIndex = useRef<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -81,7 +87,9 @@ export function TaskList({
               done={t.done}
               title={t.title}
               context={t.context}
-              fecha={fechaCorta(t)}
+              coordinada={t.end_date ?? t.start_date ?? null}
+              realizada={t.done_at ?? null}
+              hoy={hoyEfectivo}
               owner={t.owner}
               responsables={responsables}
               canEditOwner={canEditOwner}
@@ -126,7 +134,9 @@ export function TaskList({
             done={t.done}
             title={t.title}
             context={t.context}
-            fecha={fechaCorta(t)}
+            coordinada={t.end_date ?? t.start_date ?? null}
+            realizada={t.done_at ?? null}
+            hoy={hoyEfectivo}
             owner={t.owner}
             responsables={responsables}
             canEditOwner={canEditOwner}
