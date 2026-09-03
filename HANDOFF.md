@@ -1162,6 +1162,21 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
+### 2 de septiembre de 2026 (tanda 8) — Las etapas viven dentro del resumen, no debajo
+
+El usuario aclaró la tanda 7: quería las tarjetas de etapa **anidadas dentro** del desplegable de
+"Resumen del proyecto", no como una sección aparte a continuación.
+
+- `components/ProjectOverview.tsx` gana un prop `children`: si vienen, se renderizan al final del
+  `Collapsible`, después de la nota, bajo un rótulo "Etapas del proyecto".
+- `app/cronogramas/page.tsx` construye la cuadrícula de etapas (`etapasGrid`) una sola vez y
+  decide dónde ponerla: si la empresa tiene más de un cronograma, va como `children` de
+  `ProjectOverview` (queda oculta hasta que el usuario despliega el resumen); si solo tiene uno,
+  se muestra directa — no hay nada que resumir con un solo cronograma, así que `ProjectOverview`
+  ni se renderiza en ese caso (ya era así desde la tanda 6).
+- Nada cambia en la interacción del Gantt: pulsar una barra sigue abriendo esa etapa y haciendo
+  scroll hasta ella, solo que ahora esa etapa vive un nivel más adentro del árbol.
+
 ### 2 de septiembre de 2026 (tanda 7) — El resumen del proyecto también se pliega
 
 Después de los seis cambios generales pedidos sobre Gantt/responsables/plegado (ver la entrada de

@@ -139,16 +139,10 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                 </span>
               </div>
 
-              {/* Resumen global: solo tiene sentido si hay varios cronogramas
-                  que comparar dentro de la misma empresa. */}
-              {g.items.length > 1 && (
-                <div style={{ marginBottom: 16 }}>
-                  <ProjectOverview initiatives={g.items} company={company} color={g.color} vista={vista} />
-                </div>
-              )}
-
-              <div className={compacta ? "grid" : "grid g2"}>
-                {g.items.map((i: any) => {
+              {(() => {
+                const etapasGrid = (
+                  <div className={compacta ? "grid" : "grid g2"}>
+                    {g.items.map((i: any) => {
                   // El rango sale de las fases (calcStart/calcEnd), no de las
                   // columnas guardadas: esas se quedan viejas al mover una fase.
                   const rango = fmtRango(i.calcStart, i.calcEnd);
@@ -273,8 +267,24 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                       </Collapsible>
                     </article>
                   );
-                })}
-              </div>
+                    })}
+                  </div>
+                );
+
+                // El resumen global solo tiene sentido si hay varios cronogramas
+                // que comparar. Cuando existe, las tarjetas de etapa van DENTRO
+                // de su desplegable (pedido del usuario: "dentro del despliegue
+                // de resumen de proyecto van las etapas del proyecto"), no como
+                // una seccion aparte debajo. Con un solo cronograma no hay nada
+                // que resumir, asi que la cuadricula se muestra directa.
+                return g.items.length > 1 ? (
+                  <ProjectOverview initiatives={g.items} company={company} color={g.color} vista={vista}>
+                    {etapasGrid}
+                  </ProjectOverview>
+                ) : (
+                  etapasGrid
+                );
+              })()}
             </section>
           ))
         )}

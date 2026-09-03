@@ -21,11 +21,17 @@ function fechaLarga(n: number): string {
  * responder "vamos atrasados?"; no pretende ser una linea base de valor ganado.
  */
 export function ProjectOverview({
-  initiatives, company, color, vista,
+  initiatives, company, color, vista, children,
 }: {
   initiatives: Initiative[]; company: string; color: string;
   /** Se usa en la clave de plegado, que es distinta por vista. */
   vista: string;
+  /**
+   * Las tarjetas de cada etapa. Van DENTRO de este mismo desplegable, no
+   * como una seccion aparte debajo: el resumen es la puerta de entrada al
+   * proyecto completo, y las etapas son su detalle, no otra cosa distinta.
+   */
+  children?: React.ReactNode;
 }) {
   const hoy = hoyEnDias();
 
@@ -217,6 +223,13 @@ export function ProjectOverview({
           tareas marcadas como completadas sobre el total; si va por debajo del <b>% de tiempo</b>, el
           proyecto está consumiendo calendario más rápido de lo que avanza.
         </p>
+
+        {children && (
+          <div className="po-etapas">
+            <div className="po-etapas-title">Etapas del proyecto</div>
+            {children}
+          </div>
+        )}
       </Collapsible>
     </div>
   );
