@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({ searchParams }: { searchParams: Record<string, string> }) {
   const hasError = searchParams?.error === "1";
   const pendiente = searchParams?.pendiente === "1";
+  const restablecido = searchParams?.restablecido === "1";
 
   // Si la consulta falla no se cae la pantalla de login: simplemente no se
   // ofrece el enlace de registro.
@@ -29,6 +30,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Record
           </div>
         </div>
         <h1 className="auth-title">Iniciar sesión</h1>
+        {restablecido ? <p className="auth-ok">Tu contraseña se actualizó. Ya puedes entrar con la nueva.</p> : null}
         {hasError ? <p className="auth-error">Correo o contraseña incorrectos.</p> : null}
         {pendiente ? (
           <p className="auth-warn">
@@ -47,6 +49,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Record
           </div>
         </div>
         <button type="submit" className="btn primary auth-submit">Entrar</button>
+        <p className="auth-foot">
+          <Link href="/recuperar" className="auth-link">¿Olvidaste tu contraseña?</Link>
+        </p>
         {registroAbierto ? (
           <p className="auth-foot">
             ¿No tienes cuenta? <Link href="/registro" className="auth-link">Solicita una</Link>

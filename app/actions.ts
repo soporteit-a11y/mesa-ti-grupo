@@ -3,9 +3,11 @@
 import { sql, ensureSchema } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { randomBytes } from "crypto";
 import { verifyPassword, hashPassword } from "@/lib/password";
 import { createSessionCookie, clearSessionCookie, getCurrentUser, requireAdmin, roleHome } from "@/lib/auth";
 import { getRegistroAbierto } from "@/lib/data";
+import { sendEmail, baseUrl, emailRestablecer, emailBienvenida, emailCuentaAprobada } from "@/lib/email";
 
 export async function login(formData: FormData) {
   await ensureSchema();
@@ -57,6 +59,47 @@ export async function logout() {
 }
 
 /**
+ * Auto-servicio de "olvidé mi contraseña". Muestra el mismo mensaje de éxito
+ * exista o no la cuenta, y aunque el correo no llegue a enviarse (sin
+ * RESEND_API_KEY configurada, por ejemplo) — decir "ese correo no está
+ * registrado" permitiría averiguar quién tiene cuenta probando direcciones,
+ * el mismo motivo por el que registerUser ya hace esto.
+ */
+export async function requestPasswordReset(formData: FormData) {
+  await ensureSchema();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  if (email) {
+    const rows = await sql!`SELECT id, name FROM users WHERE lower(email) = ${email} AND approved = true`;
+    const user = rows[0] as { id: number; name: string } | undefined;
+    if (user) {
+      const link = await crearEnlaceRestablecer(user.id);
+      const { subject, html } = emailRestablecer(user.name, link);
+      await sendEmail(email, subject, html);
+    }
+  }
+  redirect("/recuperar?listo=1");
+}
+
+/** Completa el restablecimiento: cambia la clave, cierra sesiones abiertas de ese usuario. */
+export async function resetPassword(formData: FormData) {
+  await ensureSchema();
+  const token = String(formData.get("token") || "");
+  const password = String(formData.get("password") || "");
+  if (!token) redirect("/login");
+  if (password.length < 8) redirect(`/restablecer?token=${token}&error=1`);
+
+  const rows = await sql!`SELECT user_id FROM password_resets WHERE token = ${token} AND expires_at > now()`;
+  const row = rows[0] as { user_id: number } | undefined;
+  if (!row) redirect("/restablecer?vencido=1");
+
+  await sql!`UPDATE users SET password_hash = ${hashPassword(password)} WHERE id = ${row!.user_id}`;
+  await sql!`DELETE FROM password_resets WHERE user_id = ${row!.user_id}`;
+  // Si alguien mas dejo una sesion abierta con la clave vieja, se cierra.
+  await sql!`DELETE FROM sessions WHERE user_id = ${row!.user_id}`;
+  redirect("/login?restablecido=1");
+}
+
+/**
  * Rol valido a partir del formulario. Solo tres valores existen; cualquier
  * otra cosa cae en "agent" en vez de fallar, igual que el resto de las
  * acciones de este archivo tratan un dato invalido (silencioso, no un error).
@@ -64,6 +107,20 @@ export async function logout() {
 function parseRole(formData: FormData): "admin" | "agent" | "viewer" {
   const raw = String(formData.get("role") || "agent");
   return raw === "admin" || raw === "viewer" ? raw : "agent";
+}
+
+/**
+ * Crea (reemplazando cualquier anterior) el token de restablecimiento de un
+ * usuario y devuelve el enlace completo listo para meter en un correo.
+ * Compartida por el auto-servicio (requestPasswordReset), el envio manual del
+ * admin (sendResetLink) y la bienvenida de una cuenta sin clave (createUser).
+ */
+async function crearEnlaceRestablecer(userId: number): Promise<string> {
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+  await sql!`DELETE FROM password_resets WHERE user_id = ${userId}`;
+  await sql!`INSERT INTO password_resets (token, user_id, expires_at) VALUES (${token}, ${userId}, ${expiresAt.toISOString()})`;
+  return `${baseUrl()}/restablecer?token=${token}`;
 }
 
 // Guarda las empresas asignadas a un usuario. Se llama desde createUser y
@@ -89,13 +146,26 @@ export async function createUser(formData: FormData) {
   // formulario.
   const canEdit = role === "agent" && formData.get("can_edit_schedule") != null;
   const canTicket = role === "agent" && formData.get("can_create_tickets") != null;
-  if (!name || !email || !password) return;
+  if (!name || !email) return;
+
+  // La clave es opcional: si el admin la deja en blanco, se genera una al azar
+  // que nadie va a escribir nunca (nadie la conoce) y se le manda al usuario un
+  // enlace para que elija la suya — asi el admin no tiene que inventarle una
+  // contraseña y comunicarsela por otro medio.
+  const passwordHash = hashPassword(password || randomBytes(24).toString("hex"));
 
   const rows = await sql!`INSERT INTO users (name, email, password_hash, role, approved, can_edit_schedule, can_create_tickets)
-    VALUES (${name}, ${email}, ${hashPassword(password)}, ${role}, true, ${canEdit}, ${canTicket})
+    VALUES (${name}, ${email}, ${passwordHash}, ${role}, true, ${canEdit}, ${canTicket})
     ON CONFLICT (email) DO NOTHING RETURNING id`;
   if (rows.length === 0) return; // correo ya usado
-  await saveUserCompanies(rows[0].id, formData);
+  const userId = rows[0].id;
+  await saveUserCompanies(userId, formData);
+
+  if (!password) {
+    const link = await crearEnlaceRestablecer(userId);
+    const { subject, html } = emailBienvenida(name, link);
+    await sendEmail(email, subject, html);
+  }
   revalidatePath("/config");
 }
 
@@ -110,10 +180,34 @@ export async function setUserApproved(formData: FormData) {
   const me = await getCurrentUser();
   if (me?.id === id) return; // no revocarte a ti mismo
 
+  // Se lee el estado anterior para no reenviar el correo de "cuenta activada"
+  // cada vez que el admin la active/desactive varias veces.
+  const antes = await sql!`SELECT approved, email, name FROM users WHERE id = ${id}`;
   await sql!`UPDATE users SET approved = ${approved} WHERE id = ${id}`;
   // Al revocar se cierran sus sesiones abiertas: si no, seguiria dentro hasta
   // que la cookie caducara sola.
   if (!approved) await sql!`DELETE FROM sessions WHERE user_id = ${id}`;
+
+  if (approved && antes[0] && !antes[0].approved) {
+    const { subject, html } = emailCuentaAprobada(antes[0].name, `${baseUrl()}/login`);
+    await sendEmail(antes[0].email, subject, html);
+  }
+  revalidatePath("/config");
+}
+
+/** El admin dispara el mismo correo de restablecimiento sin conocer ni tocar la clave actual. */
+export async function sendResetLink(formData: FormData) {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+  const id = Number(formData.get("id"));
+  if (!id) return;
+  const rows = await sql!`SELECT email, name FROM users WHERE id = ${id}`;
+  const user = rows[0] as { email: string; name: string } | undefined;
+  if (!user) return;
+
+  const link = await crearEnlaceRestablecer(id);
+  const { subject, html } = emailRestablecer(user.name, link);
+  await sendEmail(user.email, subject, html);
   revalidatePath("/config");
 }
 

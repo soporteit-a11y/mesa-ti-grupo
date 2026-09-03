@@ -8,7 +8,16 @@ import { getSession } from "@/lib/session";
 const SOLO_ADMIN = ["/", "/tickets", "/config"];
 
 /** Unicas rutas accesibles sin haber iniciado sesion. */
-const PUBLICAS = ["/login", "/registro"];
+const PUBLICAS = ["/login", "/registro", "/recuperar", "/restablecer"];
+
+/**
+ * De las publicas, esta es la unica que sigue teniendo sentido con sesion
+ * activa: el token de la URL es lo que autoriza el cambio de clave, no la
+ * cookie, y el enlace puede llegar mientras la persona sigue logueada en otro
+ * dispositivo (o el admin se lo mando sin cerrarle la sesion). Las demas
+ * (login/registro/recuperar) no aportan nada si ya hay sesion.
+ */
+const PUBLICA_SIEMPRE = "/restablecer";
 
 /** El rol "visualizador" solo ve cronogramas: no crea tickets ni tiene los suyos. */
 const SOLO_NO_VIEWER = ["/mis-tickets"];
@@ -44,8 +53,9 @@ export async function middleware(req: NextRequest) {
 
   const inicio = inicioDe(user.role);
 
-  // Ya con sesion, login/registro no tienen sentido: a su pantalla de inicio.
-  if (PUBLICAS.includes(pathname)) {
+  // Ya con sesion, login/registro/recuperar no tienen sentido: a su pantalla
+  // de inicio. /restablecer es la excepcion, ver PUBLICA_SIEMPRE.
+  if (pathname !== PUBLICA_SIEMPRE && PUBLICAS.includes(pathname)) {
     const url = req.nextUrl.clone();
     url.pathname = inicio;
     url.search = "";

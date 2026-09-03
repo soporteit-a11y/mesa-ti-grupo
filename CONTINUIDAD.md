@@ -8,11 +8,18 @@
 >
 > **Última sesión:** 2 de septiembre de 2026
 > **Estado del sistema:** en producción, funcionando, sin incidencias abiertas.
-> **El sistema ya NO es de acceso abierto:** tiene login con roles `admin` / `agent`, permisos
-> por cuenta, auto-registro con aprobación, bloqueo de rutas por middleware y gestión de cuentas
-> desde `/config`. Antes de tocar cualquier cosa relacionada con permisos, sesiones o el
-> middleware, lee **HANDOFF.md §5.11** — en particular la tabla de qué archivo puede correr en
-> Edge Runtime y cuál no, y la advertencia de no agregar columnas a `getSession()`.
+> **El sistema ya NO es de acceso abierto:** tiene login con tres roles (`admin`/`agent`/`viewer`),
+> permisos por cuenta, auto-registro con aprobación, recuperación de clave por correo, bloqueo de
+> rutas por middleware y gestión de cuentas desde `/config`. Antes de tocar cualquier cosa
+> relacionada con permisos, sesiones o el middleware, lee **HANDOFF.md §5.11** — en particular la
+> tabla de qué archivo puede correr en Edge Runtime y cuál no, y la advertencia de no agregar
+> columnas a `getSession()`.
+>
+> **🔴 Pendiente tuyo para que el correo funcione:** el código de recuperación/restablecimiento de
+> clave ya está desplegado, pero **no sale ningún correo** hasta que agregues `RESEND_API_KEY` en
+> Vercel (cuenta gratis en resend.com). Sin verificar además un dominio propio ahí y poner
+> `EMAIL_FROM`, los correos de prueba solo entregan al correo del dueño de la cuenta de Resend, no
+> a un colaborador cualquiera. Detalle completo en HANDOFF.md §14, tanda 10.
 >
 > **El módulo "Rutas de trabajo" ahora se llama "Cronogramas"** y vive en `/cronogramas`
 > (`/rutas` quedó como redirección). Ahora tiene **fases con fechas de inicio/fin y una vista
@@ -148,8 +155,22 @@ desde cero (tabla `users` vacía), se vuelven a poner.
 **P0.ter · Cambiar la contraseña inicial.**
 La contraseña con la que se creó la cuenta admin llegó a compartirse por chat durante la sesión
 del 2-sep, así que debe considerarse comprometida. Se cambia desde `/config` → Usuarios del
-sistema → escribir la clave nueva en la fila de tu cuenta → ✓. Al cambiarla se cierran
-automáticamente todas las sesiones abiertas de ese usuario.
+sistema → escribir la clave nueva en la fila de tu cuenta → ✓ (o, ahora que existe, con el botón
+**Enviar enlace** de tu propia fila — te llega un correo y la eliges tú, sin que quede escrita en
+ningún formulario que yo vea). Al cambiarla se cierran automáticamente todas las sesiones abiertas
+de ese usuario.
+
+**P0.quater · Configurar Resend para que el correo salga de verdad.**
+Sin esto, `/recuperar`, el botón "Enviar enlace" de `/config`, la bienvenida a una cuenta sin
+clave y el aviso de "cuenta aprobada" no le llegan a nadie — el código corre igual, pero
+`sendEmail()` no-opea con un aviso en los logs de Vercel en vez de enviar nada. Pasos: (1) cuenta
+gratis en resend.com, 3.000 correos/mes, sin tarjeta; (2) verificar ahí un dominio propio (ej.
+`droppett.io`) siguiendo los registros DNS que da Resend; (3) `RESEND_API_KEY` en las variables de
+entorno de Vercel — la agregas tú mismo, igual que `ADMIN_PASSWORD`, nunca por chat; (4)
+`EMAIL_FROM` con una dirección de ese dominio, ej. `"Mesa TI <notificaciones@droppett.io>"`. Sin
+el paso 2, el remitente de prueba de Resend **solo entrega al correo del dueño de la cuenta de
+Resend** — cualquier colaborador o visualizador real no recibiría nada, aunque la API key esté
+puesta. Detalle completo en HANDOFF.md §14, tanda 10.
 
 **Nota sobre el cambio de despliegue.** Un cambio en las variables de entorno de Vercel **no**
 afecta a un despliegue que ya está corriendo: hay que hacer *Redeploy* del despliegue **más
@@ -192,11 +213,13 @@ Si no aparecen, mira los logs de Vercel buscando `[avisos SLA]`.
 
 ### 🟡 Funciones no implementadas
 
-**P2 · Alertas nivel 2 — resumen diario por correo.**
-Vercel Cron (`vercel.json`) llamando a un endpoint `/api/cron/alertas`, con Resend para enviar
-(capa gratuita: 3.000 correos/mes). Sería el primer `/api/` del proyecto.
+**P2 · Alertas nivel 2 — resumen diario por correo. Más fácil desde 2026-09-02.**
+Vercel Cron (`vercel.json`) llamando a un endpoint `/api/cron/alertas`. Sería el primer `/api/`
+del proyecto, pero el envío en sí ya no hay que montarlo: reusa `sendEmail()` de `lib/email.ts`
+(tanda 10, §14), que ya habla con Resend. Solo falta P0.quater (la cuenta de Resend configurada)
+y el propio cron.
 *Limitación real: el plan Hobby de Vercel solo permite cron **diario**. Para avisos por hora hace
-falta Pro (20 USD/mes).* Estimación: ~3 h. Requiere API key de Resend.
+falta Pro (20 USD/mes).* Estimación: ~1-2 h (bajó porque el envío de correo ya existe).
 
 **P3 · Alertas para rutas de trabajo. ✅ Resuelto en parte (2026-08-25).**
 `initiatives.due_date` ya existe, editable desde la tarjeta y el diálogo de alta. Cada ruta muestra

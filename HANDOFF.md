@@ -14,9 +14,15 @@
 >
 > **Fecha del traspaso:** 24 de agosto de 2026
 > **Última actualización:** 2 de septiembre de 2026 — **el sistema ya no es de acceso abierto.**
-> Tiene login con dos roles (`admin` y `agent`), sesiones en cookie, bloqueo de rutas por
-> middleware, gestión de cuentas en `/config` y asignación de empresas visibles por usuario. Ver
-> §5.11, que es la sección que hay que leer antes de tocar nada relacionado con permisos.
+> Tiene login con tres roles (`admin`, `agent`, `viewer`), sesiones en cookie, bloqueo de rutas por
+> middleware, gestión de cuentas en `/config`, asignación de empresas visibles por usuario, y
+> recuperación/restablecimiento de contraseña por correo. Ver §5.11, que es la sección que hay que
+> leer antes de tocar nada relacionado con permisos.
+> **Acción pendiente tuya, Eddy:** el envío de correo (recuperar clave, "Enviar enlace" en
+> `/config`, bienvenida, cuenta aprobada) está programado pero **no va a salir ningún correo**
+> hasta que agregues `RESEND_API_KEY` en Vercel — es una cuenta gratis en resend.com. Para que le
+> llegue a cualquier colaborador (no solo a ti) también hace falta verificar un dominio propio ahí
+> y poner `EMAIL_FROM`. Todo el detalle está en la tanda 10 del §14.
 > **Trampa importante para quien continúe:** la capa de datos está partida en tres archivos
 > (`lib/sql.ts`, `lib/session.ts`, `lib/db.ts`) por una restricción del Edge Runtime, no por
 > gusto. La tabla de §5.11 explica qué puede importar cada uno; romper esa regla hace que
@@ -1170,6 +1176,72 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 2 de septiembre de 2026 (tanda 10) — Recuperación de clave, restablecimiento por el admin, y correo real
+
+Tres pedidos juntos porque son la misma pieza: (1) opción de recuperar contraseña en `/login`,
+(2) que el admin pueda asignar o restablecer la clave de cualquiera, (3) que le lleguen
+notificaciones al correo que se le registró. Los tres necesitaban lo mismo — enviar correo de
+verdad — así que se implementaron a la vez.
+
+**⚠️ Acción pendiente del usuario para que esto funcione de verdad:** todo el código está
+desplegado, pero **sin una cuenta de Resend conectada, ningún correo sale** — ver el aviso
+completo más abajo y en CONTINUIDAD.md.
+
+- `lib/email.ts` (nuevo): `sendEmail()` llama a la API HTTP de Resend con `fetch` puro — **sin
+  agregar ninguna dependencia**, coherente con que este proyecto no usa librerías de servicios
+  externos. Sin `RESEND_API_KEY` configurada, no-opea con un aviso en los logs en vez de fallar:
+  igual que `hasDb`, una integración opcional sin configurar no debe tumbar la acción que la
+  dispara (crear un usuario, pedir un restablecimiento siguen funcionando aunque el correo no
+  salga — el usuario simplemente no lo recibe hasta que se configure).
+- **`baseUrl()`** arma el dominio de los enlaces de los correos leyendo el `host` del propio
+  request (`headers()` de Server Action), no de una variable de entorno nueva: funciona igual en
+  producción, en un preview de Vercel, o en local, sin nada que mantener sincronizado.
+- **Tabla `password_resets`** (`token` PK, `user_id`, `expires_at`): token de un solo uso, válido
+  1 hora, una fila viva por usuario a la vez (se borra la anterior antes de crear una nueva). El
+  helper `crearEnlaceRestablecer(userId)` en `app/actions.ts` es compartido por las tres
+  situaciones que generan un enlace: auto-servicio, botón del admin, y bienvenida sin clave.
+- **Auto-servicio (`/recuperar` → `/restablecer`).** `/login` gana un enlace "¿Olvidaste tu
+  contraseña?". `requestPasswordReset` muestra el mismo mensaje de éxito exista o no la cuenta
+  registrada, **y aunque el correo no llegue a enviarse** — el mismo motivo que `registerUser`
+  (§14, tanda 3): decir "ese correo no está registrado" permitiría averiguar quién tiene cuenta
+  probando direcciones. `/restablecer` valida el token **al cargar la página**, no solo al
+  enviar el formulario, para no mostrarle a alguien un formulario que de todos modos va a
+  rechazar. Al completar el cambio se cierran las sesiones abiertas de ese usuario (mismo patrón
+  que cambiar la clave desde `/config`) y redirige a `/login?restablecido=1`.
+- **`/restablecer` es la única ruta pública que sigue siendo accesible con sesión activa**
+  (`PUBLICA_SIEMPRE` en `middleware.ts`): el token de la URL es lo que autoriza el cambio, no la
+  cookie, y el enlace puede llegar mientras la persona sigue logueada en otro dispositivo, o el
+  admin se lo mandó sin cerrarle la sesión. `/login`, `/registro` y `/recuperar` sí redirigen a la
+  pantalla de inicio si ya hay sesión, porque no aportan nada en ese caso.
+- **El admin puede "asignar" o "restablecer" (los dos verbos del pedido) sin que sean lo mismo:**
+  *asignar* sigue siendo escribir una clave nueva a mano en el campo de `/config` (ya existía);
+  *restablecer* es el botón nuevo **"Enviar enlace"** en cada fila de usuario
+  (`sendResetLink`) — dispara el mismo correo de recuperación sin que el admin necesite conocer ni
+  tocar la clave actual.
+- **`createUser` ya no exige contraseña.** Si el admin la deja vacía, se genera una al azar que
+  nadie va a escribir nunca (nadie la conoce) y se le envía al usuario un correo de bienvenida con
+  un enlace para que elija la suya — así el admin no tiene que inventarle una clave y comunicársela
+  por otro medio (WhatsApp, papelito, lo que sea).
+- **Notificación al aprobar una cuenta.** `setUserApproved` ahora también envía un correo
+  "tu cuenta ya está activa" — pero **solo en la transición de no-aprobada a aprobada** (se lee el
+  estado anterior antes del `UPDATE`): si el admin activa/desactiva la misma cuenta varias veces,
+  no se le manda el correo cada vez.
+
+**El aviso importante sobre Resend, para no llevarse una sorpresa:** el remitente de prueba
+(`onboarding@resend.dev`, el que se usa si no se configura `EMAIL_FROM`) **solo entrega al correo
+con el que se creó la cuenta de Resend** — es una limitación de su modo sandbox, no un bug de
+este código. Para que le llegue de verdad a cualquier colaborador o visualizador, hace falta:
+1. Crear una cuenta en resend.com (gratis, 3.000 correos/mes, sin tarjeta).
+2. Verificar un dominio propio ahí (ej. `droppett.io`) — Resend da los registros DNS a agregar.
+3. Poner `RESEND_API_KEY` en las variables de entorno de Vercel (igual que `ADMIN_PASSWORD`:
+   Eddy la agrega él mismo, nunca se comparte por chat).
+4. Poner `EMAIL_FROM` con una dirección de ese dominio verificado, ej.
+   `"Mesa TI <notificaciones@droppett.io>"`.
+Sin los pasos 1-2, con `RESEND_API_KEY` puesta pero usando el remitente de prueba, las pruebas
+solo van a "funcionar" si se prueban con el correo del dueño de la cuenta de Resend — cualquier
+otro destinatario fallará en silencio (el `sendEmail()` de este proyecto registra el error en los
+logs de Vercel, pero la acción que lo disparó sigue completándose igual).
 
 ### 2 de septiembre de 2026 (tanda 9) — Tercer rol: Visualizador
 

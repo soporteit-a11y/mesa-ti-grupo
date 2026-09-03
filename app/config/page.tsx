@@ -9,7 +9,7 @@ import {
   createCategory, updateCategory, deleteCategory,
   createCollaborator, updateCollaborator, deleteCollaborator,
   createCanned, deleteCanned,
-  createUser, updateUser, deleteUser, setUserApproved, setRegistroAbierto,
+  createUser, updateUser, deleteUser, setUserApproved, setRegistroAbierto, sendResetLink,
 } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
@@ -197,6 +197,16 @@ export default async function ConfigPage() {
                       {u.approved ? "Activa" : "Aprobar"}
                     </button>
                   </form>
+                  <form action={sendResetLink}>
+                    <input type="hidden" name="id" value={u.id} />
+                    <button
+                      type="submit"
+                      className="btn sm"
+                      title="Enviarle un correo para que elija una contraseña nueva, sin tocar la actual"
+                    >
+                      Enviar enlace
+                    </button>
+                  </form>
                   <form action={deleteUser}>
                     <input type="hidden" name="id" value={u.id} />
                     <button type="submit" className="btn sm danger" title="Eliminar cuenta">✕</button>
@@ -213,7 +223,13 @@ export default async function ConfigPage() {
               <option value="viewer">Visualizador</option>
               <option value="admin">Super admin</option>
             </select>
-            <input type="password" name="password" placeholder="Contraseña" required autoComplete="new-password" />
+            <input
+              type="password"
+              name="password"
+              placeholder="Contraseña (opcional)"
+              autoComplete="new-password"
+              title="Déjala vacía para enviarle un enlace y que él mismo elija su contraseña"
+            />
             <div className="cfg-user-companies">
               <span className="cfg-user-clabel">Empresas visibles</span>
               {companies.map((co) => (
@@ -241,8 +257,10 @@ export default async function ConfigPage() {
             con los permisos decides si además puede <b>marcar tareas</b> y <b>reportar tickets</b>. Un
             <b> visualizador</b> solo puede ver los cronogramas de sus empresas — nunca marca tareas ni
             reporta tickets, así que esos dos permisos no le aplican aunque queden marcados. Deja la
-            clave vacía al editar para no cambiarla. No puedes eliminar ni desactivar tu propia cuenta,
-            ni dejar el sistema sin ningún super admin.
+            clave vacía al crear o al editar para no asignarle una tú — en vez de eso se le manda un
+            correo para que elija la suya (o usa <b>Enviar enlace</b> en cualquier momento, sin tocar
+            la clave actual). No puedes eliminar ni desactivar tu propia cuenta, ni dejar el sistema
+            sin ningún super admin.
           </p>
         </div>
 

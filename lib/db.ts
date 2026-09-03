@@ -96,6 +96,13 @@ async function init(q: NonNullable<typeof sql>) {
     token TEXT PRIMARY KEY, user_id INT REFERENCES users(id) ON DELETE CASCADE,
     expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ DEFAULT now()
   )`;
+  // Token de un solo uso para restablecer contraseña, por correo o disparado
+  // por el admin desde /config. Solo hay una fila viva por usuario a la vez
+  // (se borra la anterior antes de crear una nueva) y se borra al usarse.
+  await q`CREATE TABLE IF NOT EXISTS password_resets (
+    token TEXT PRIMARY KEY, user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ DEFAULT now()
+  )`;
   // Empresas visibles para cada usuario. Solo aplica al rol 'agent': el admin
   // siempre ve las cuatro. Sin filas para un agente = no ve ninguna ruta.
   await q`CREATE TABLE IF NOT EXISTS user_companies (
