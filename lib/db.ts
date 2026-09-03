@@ -217,6 +217,21 @@ async function init(q: NonNullable<typeof sql>) {
     await q`INSERT INTO meta (k, v) VALUES ('sinco_fechas', 'v2') ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
   }
 
+  // Las columnas initiatives.start_date/due_date pasan a significar "rango que
+  // una persona declaro a mano", y mandan sobre el que se calcula de las fases.
+  // Hasta ahora no significaban eso: las escribio el import de SINCO y despues
+  // nadie las mantuvo, asi que arrastran los valores de aquel dia.
+  //
+  // Se limpian una sola vez (autorizado por Eddy) para no convertir ese arrastre
+  // en la autoridad — mostraria rangos viejos en cronogramas que nadie toco.
+  // Tras esto cada etapa arranca con su rango calculado, que es el correcto, y
+  // quien quiera declarar una ventana distinta la fija con el lapiz.
+  const rangos = await q`SELECT v FROM meta WHERE k = 'rango_manual'`;
+  if (rangos[0]?.v !== "v1") {
+    await q`UPDATE initiatives SET start_date = NULL, due_date = NULL`;
+    await q`INSERT INTO meta (k, v) VALUES ('rango_manual', 'v1') ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
+  }
+
   // Reemplaza los tickets de ejemplo por los tickets reales del CSV (una sola vez).
   const ver = await q`SELECT v FROM meta WHERE k = 'tickets_seed'`;
   if (ver.length === 0 || ver[0].v !== "csv-v1") {
@@ -399,8 +414,11 @@ async function reimportarSinco(q: NonNullable<typeof sql>, versionPrevia: string
     const dup = await q`SELECT id FROM initiatives WHERE company_id = ${cmg} AND title = ${c.titulo}`;
     if (dup.length > 0) continue;
 
-    const ini = await q`INSERT INTO initiatives (company_id, title, area, status, owner, start_date, due_date)
-      VALUES (${cmg}, ${c.titulo}, 'SINCO ERP', 'en_curso', 'SINCOSOFT - MESSINA', ${c.inicio}, ${c.fin})
+    // Sin start_date/due_date a proposito: esas columnas son ahora el rango que
+    // una persona declara a mano, y un import no declara nada. El rango de cada
+    // cronograma sale de las fechas de sus fases, que si se importan abajo.
+    const ini = await q`INSERT INTO initiatives (company_id, title, area, status, owner)
+      VALUES (${cmg}, ${c.titulo}, 'SINCO ERP', 'en_curso', 'SINCOSOFT - MESSINA')
       RETURNING id`;
     const iniId = ini[0].id;
 
@@ -472,9 +490,11 @@ async function fecharFasesPendientes(q: NonNullable<typeof sql>) {
         AND p.title = ${fase} AND p.start_date IS NULL`;
   }
 
-  // Ya no hace falta recalcular initiatives.start_date/due_date: getInitiatives()
-  // deriva el rango de las fases en cada lectura (calcStart/calcEnd), asi que
-  // esas columnas dejaron de usarse para mostrar y no pueden quedarse viejas.
+  // No se tocan initiatives.start_date/due_date: el rango que se muestra sale
+  // de las fases en cada lectura (calcStart/calcEnd en lib/data.ts), y esas dos
+  // columnas quedan solo para el rango que alguien fije a mano con el lapiz.
+  // Escribirlas aqui volveria a llenarlas de valores que nadie mantiene, que es
+  // justo el problema que limpio la migracion 'rango_manual'.
 }
 
 async function seedAdmin(q: NonNullable<typeof sql>) {

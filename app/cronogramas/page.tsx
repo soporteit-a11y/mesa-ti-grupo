@@ -17,7 +17,7 @@ import { Collapsible, ExpandirTodo } from "@/components/Collapsible";
 import { diaDeFecha, hoyEnDias } from "@/lib/dates";
 import { InitiativeStatusControl } from "@/components/InitiativeStatusControl";
 import { InitiativeTitle } from "@/components/InitiativeTitle";
-import { InitiativeDueDate } from "@/components/InitiativeDueDate";
+import { InitiativeFechas } from "@/components/InitiativeFechas";
 import { DeleteInitiativeButton } from "@/components/DeleteInitiativeButton";
 import { FiltersCompanyClient } from "@/components/FiltersCompanyClient";
 
@@ -153,12 +153,18 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                   const asignablesAqui = asignables
                     .filter((u: any) => u.role === "admin" || u.company_ids.includes(i.company_id))
                     .map((u: any) => ({ id: u.id, name: u.name }));
-                  // El rango sale de las fases (calcStart/calcEnd), no de las
-                  // columnas guardadas: esas se quedan viejas al mover una fase.
+                  // Rango efectivo: el fijado a mano si lo hay, si no el que
+                  // sale de las fases (ver Initiative.calcStart en lib/data.ts).
                   const rango = fmtRango(i.calcStart, i.calcEnd);
-                  // Para el chip de vencimiento manda la fecha limite manual si
-                  // existe; si no, el fin real del cronograma.
-                  const due = dueInfo(i.due_date || i.calcEnd, i.status);
+                  const derivado = fmtRango(i.derivStart, i.derivEnd);
+                  // Aviso cuando las fases se salen de la ventana declarada: es
+                  // justo el caso que hay que ver, porque significa que el plan
+                  // real ya no cabe en el compromiso.
+                  const desborde = Boolean(
+                    (i.start_date && i.derivStart && i.derivStart < i.calcStart!) ||
+                    (i.due_date && i.derivEnd && i.derivEnd > i.calcEnd!)
+                  );
+                  const due = dueInfo(i.calcEnd, i.status);
                   const conFases = i.phases.length > 0;
                   const cabecera = (
                     <>
@@ -178,7 +184,14 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                           </div>
                           <div className="init-due-row">
                             {esAdmin ? (
-                              <InitiativeDueDate id={i.id} dueDate={i.due_date} rango={rango} />
+                              <InitiativeFechas
+                                id={i.id}
+                                startDate={i.start_date}
+                                dueDate={i.due_date}
+                                rango={rango}
+                                derivado={derivado}
+                                desborde={desborde}
+                              />
                             ) : rango ? (
                               <span className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>{rango}</span>
                             ) : null}

@@ -45,13 +45,17 @@ export function NewInitiativeDialog({ companies }: { companies: any[] }) {
               <label>Titulo del cronograma *</label>
               <input type="text" name="title" required placeholder="Ej: Aseguramiento perimetral FortiGate" />
             </div>
+            <div className="field">
+              <label>Responsable</label>
+              <input type="text" name="owner" placeholder="Quien lidera" />
+            </div>
             <div className="row2">
               <div className="field">
-                <label>Responsable</label>
-                <input type="text" name="owner" placeholder="Quien lidera" />
+                <label>Inicio</label>
+                <input type="date" name="start_date" />
               </div>
               <div className="field">
-                <label>Fecha límite</label>
+                <label>Fin</label>
                 <input type="date" name="due_date" />
               </div>
             </div>

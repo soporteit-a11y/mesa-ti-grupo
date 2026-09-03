@@ -56,8 +56,14 @@ export function GanttChart({ initiative }: { initiative: Initiative }) {
     );
   }
 
-  const min = Math.min(...conFecha.map((b) => b.ini));
-  const max = Math.max(...conFecha.map((b) => b.fin));
+  // El eje cubre las fases Y la ventana declarada de la etapa, cuando la hay.
+  // Si el admin dijo que la etapa va hasta septiembre pero la ultima fase acaba
+  // en julio, el eje tiene que llegar a septiembre: de lo contrario el hueco
+  // que falta por planificar — que es el dato interesante — no se ve.
+  const declIni = diaDeFecha(initiative.calcStart);
+  const declFin = diaDeFecha(initiative.calcEnd);
+  const min = Math.min(...conFecha.map((b) => b.ini), ...(declIni !== null ? [declIni] : []));
+  const max = Math.max(...conFecha.map((b) => b.fin), ...(declFin !== null ? [declFin] : []));
   const span = Math.max(1, max - min);
   const hoy = hoyEnDias();
 

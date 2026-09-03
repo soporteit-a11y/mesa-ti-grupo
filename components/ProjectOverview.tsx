@@ -39,28 +39,35 @@ export function ProjectOverview({
 
   const filas = initiatives
     .map((i) => {
-      // Solo fases con AMBAS fechas interpretables. Una fecha ilegible se
-      // descarta en vez de propagar NaN: un NaN aqui tumbaba la pagina entera.
-      const fechas: [number, number][] = [];
-      for (const p of i.phases) {
-        const a = diaDeFecha(p.start_date);
-        const b = diaDeFecha(p.end_date);
-        if (a !== null && b !== null) fechas.push([a, b]);
-      }
-      if (fechas.length === 0) return null;
+      // El rango de la barra es el rango EFECTIVO de la etapa: el que el admin
+      // fijo a mano si lo hizo, y si no el que sale de sus fases (la mezcla la
+      // resuelve calcStart/calcEnd en lib/data.ts). Asi, fijar las fechas de una
+      // etapa mueve su barra aqui — que es justo para lo que sirve fijarlas.
+      //
+      // Una fecha ilegible se descarta en vez de propagar NaN: un NaN aqui
+      // tumbaba la pagina entera.
+      const ini = diaDeFecha(i.calcStart);
+      const fin = diaDeFecha(i.calcEnd);
+      if (ini === null || fin === null) return null;
       return {
         id: i.id,
         titulo: i.title,
-        ini: Math.min(...fechas.map((f) => f[0])),
-        fin: Math.max(...fechas.map((f) => f[1])),
+        // Un rango invertido no se puede dibujar; se voltea en vez de perder la
+        // fila, que es lo unico util que se puede hacer con el.
+        ini: Math.min(ini, fin),
+        fin: Math.max(ini, fin),
         progress: i.progress,
         done: i.done,
         total: i.total,
+        // La etapa declara una ventana que sus fases ya no respetan.
+        desborde:
+          (Boolean(i.start_date) && i.derivStart !== null && i.derivStart < i.calcStart!) ||
+          (Boolean(i.due_date) && i.derivEnd !== null && i.derivEnd > i.calcEnd!),
       };
     })
     .filter(Boolean) as {
       id: number; titulo: string; ini: number; fin: number;
-      progress: number; done: number; total: number;
+      progress: number; done: number; total: number; desborde: boolean;
     }[];
 
   if (filas.length === 0) return null;
@@ -239,7 +246,10 @@ export function ProjectOverview({
                           color={color}
                           vencida={vencida}
                           lista={f.progress === 100}
-                          detalle={`${f.titulo} · ${f.done}/${f.total} tareas · ${f.progress}%`}
+                          detalle={
+                            `${f.titulo} · ${f.done}/${f.total} tareas · ${f.progress}%` +
+                            (f.desborde ? "\n\nOJO: hay fases fuera del rango fijado para esta etapa" : "")
+                          }
                         />
                       </div>
                     </div>

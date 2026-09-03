@@ -537,10 +537,16 @@ dialog::backdrop { background: rgba(3,6,10,.65); backdrop-filter: blur(2px); }
 .init-due-view { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .init-due-rango { font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; }
 .init-due-rango.sin { color: var(--faint); font-style: italic; }
-.init-due-limite {
+/* Rango fijado a mano: subrayado punteado, la misma senal que usa el resto de
+   la interfaz para "esto lo escribio alguien, no salio de un calculo". */
+.init-due-rango.fijado {
+  color: var(--ink); text-decoration: underline dotted; text-underline-offset: 3px;
+}
+.init-due-aviso {
   font-size: 10px; color: var(--high); background: var(--high-w);
   border: 1px solid var(--high); border-radius: 5px; padding: 1px 6px; white-space: nowrap;
 }
+.init-due-hint { font-size: 10.5px; color: var(--faint); flex: 1 1 100%; }
 .init-due-input { font-family: var(--font-mono); font-size: 11px; padding: 4px 6px; color: var(--ink-soft); }
 
 .init-status { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line-strong); color: var(--ink-soft); background: var(--surface-2); }

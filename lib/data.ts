@@ -326,12 +326,25 @@ export type Initiative = {
   /** Tareas que no pertenecen a ninguna fase (modelo antiguo, plano). */
   looseTasks: Task[];
   /**
-   * Rango real del cronograma, calculado a partir de sus fases en cada lectura.
-   * Se prefiere a start_date/due_date para mostrar: esas dos son columnas
-   * guardadas que se quedan viejas en cuanto mueves la fecha de una fase.
+   * Rango efectivo del cronograma: el que se muestra y el que dibuja el Gantt.
+   *
+   * Por defecto sale calculado de las fases y tareas en cada lectura, que es lo
+   * correcto — asi nunca se queda viejo cuando mueves la fecha de una fase.
+   * Pero si el admin fijo `start_date`/`due_date` a mano, esos mandan: son una
+   * declaracion explicita ("esta etapa va de aqui a aqui", el compromiso con el
+   * cliente) y el calculo es solo el relleno cuando no hay declaracion.
+   *
+   * Cada extremo se resuelve por separado: se puede fijar solo el fin y dejar
+   * que el inicio siga saliendo de las fases.
    */
   calcStart: string | null;
   calcEnd: string | null;
+  /**
+   * El rango calculado puro, sin el override. Sirve para avisar cuando las
+   * fases se salen del rango declarado, que es justo el caso que hay que ver.
+   */
+  derivStart: string | null;
+  derivEnd: string | null;
   total: number;
   done: number;
   progress: number;
@@ -389,14 +402,21 @@ export async function getInitiatives(): Promise<Initiative[]> {
       if (b) fines.push(b);
     }
 
+    const derivStart = inicios.length ? inicios.sort()[0] : null;
+    const derivEnd = fines.length ? fines.sort()[fines.length - 1] : null;
+
     return {
       ...i,
       tasks: t,
       phases: ph,
       looseTasks: t.filter((x) => x.phase_id == null),
       // Como son 'YYYY-MM-DD', el orden alfabetico es el orden cronologico.
-      calcStart: inicios.length ? inicios.sort()[0] : null,
-      calcEnd: fines.length ? fines.sort()[fines.length - 1] : null,
+      // El rango fijado a mano gana extremo por extremo; el calculo es el
+      // relleno cuando ese extremo no esta declarado.
+      derivStart: derivStart,
+      derivEnd: derivEnd,
+      calcStart: toYMD(i.start_date) ?? derivStart,
+      calcEnd: toYMD(i.due_date) ?? derivEnd,
       ...avance(t),
     } as Initiative;
   });

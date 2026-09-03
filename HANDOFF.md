@@ -1177,6 +1177,31 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
+### 3 de septiembre de 2026 (tanda 14) — Cada etapa puede declarar su ventana, y el Gantt la respeta
+
+- **El lápiz de las fechas de una etapa ahora edita inicio Y fin** con calendario, no solo una
+  "fecha límite" (`components/InitiativeFechas.tsx`, antes `InitiativeDueDate.tsx`).
+- **Lo que se fija a mano manda sobre el Gantt.** `Initiative.calcStart`/`calcEnd` pasan a
+  resolverse **extremo por extremo**: el valor declarado si existe, y si no el que sale de las
+  fases. Se puede fijar solo el fin y dejar que el inicio siga saliendo del cálculo.
+- Las barras del Gantt del resumen se dibujan con ese rango efectivo, que es lo que le da sentido
+  a fijar fechas: antes salían del `min`/`max` de las fases y no había forma de moverlas.
+- **`derivStart`/`derivEnd`** conservan el rango calculado puro. Sirven para el aviso ámbar
+  «fases fuera del rango», que es el caso que hay que ver: la etapa declara una ventana que su
+  propio plan ya no respeta.
+- El Gantt interno de un cronograma extiende su eje hasta la ventana declarada. Si la etapa dice
+  que va hasta septiembre pero la última fase acaba en julio, ese hueco sin planificar se ve.
+- **Vaciar los dos campos devuelve la etapa al cálculo automático.** Es la salida cuando te
+  arrepientes, y por eso la acción no valida "falta el dato": faltar *es* la instrucción.
+- Un rango invertido se voltea en vez de rechazarse. No significa nada dibujable, y lo único que
+  pudo pasar es que se llenaran los dos campos en el orden equivocado.
+- **Migración `rango_manual` (una vez, autorizada por Eddy):** `initiatives.start_date/due_date`
+  se vacían en todos los cronogramas. Esas columnas las había escrito el import de SINCO y nadie
+  las mantuvo desde entonces — eran la foto del día de la importación. Al pasar a significar
+  "rango declarado por una persona", dejarlas habría convertido datos viejos en la autoridad y
+  habría cambiado el rango de tarjetas que nadie tocó. `reimportarSinco()` deja de escribirlas
+  por la misma razón: un import no declara nada.
+
 ### 3 de septiembre de 2026 (tanda 13) — El atraso se puede investigar, y las fases/tareas se asignan a usuarios
 
 - **El veredicto "Atrasado N puntos" deja de ser un cartel y pasa a ser un botón**

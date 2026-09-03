@@ -572,12 +572,17 @@ export async function createInitiative(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   const area = String(formData.get("area") || "");
   const owner = String(formData.get("owner") || "");
-  const due_date = String(formData.get("due_date") || "") || null;
+  let start_date = String(formData.get("start_date") || "") || null;
+  let due_date = String(formData.get("due_date") || "") || null;
+  // Mismo criterio que updateInitiativeFechas: un rango al reves se voltea.
+  if (start_date && due_date && start_date > due_date) {
+    [start_date, due_date] = [due_date, start_date];
+  }
   const tasksRaw = String(formData.get("tasks") || "");
   if (!company_id || !title) return;
 
-  const rows = await sql!`INSERT INTO initiatives (company_id, title, area, status, owner, due_date)
-    VALUES (${company_id}, ${title}, ${area}, 'planificado', ${owner}, ${due_date}) RETURNING id`;
+  const rows = await sql!`INSERT INTO initiatives (company_id, title, area, status, owner, start_date, due_date)
+    VALUES (${company_id}, ${title}, ${area}, 'planificado', ${owner}, ${start_date}, ${due_date}) RETURNING id`;
   const id = rows[0].id;
   const tasks = tasksRaw.split("\n").map((t) => t.trim()).filter(Boolean);
   let pos = 0;
@@ -676,13 +681,30 @@ export async function updateInitiativeTitle(formData: FormData) {
   revalidatePath("/");
 }
 
-export async function updateInitiativeDueDate(formData: FormData) {
+/**
+ * Fija a mano el rango de una etapa (inicio y fin). Lo que se guarda aqui manda
+ * sobre el rango que se calcula de las fases, y por eso mueve la barra de esa
+ * etapa en el Gantt del resumen.
+ *
+ * Un campo vacio guarda NULL a proposito: es como se vuelve al calculo
+ * automatico. Por eso no hay validacion de "falta el dato" — faltar ES la
+ * instruccion de no fijar nada.
+ *
+ * Si las fechas vienen al reves se voltean en vez de rechazarse. Un rango
+ * invertido no significa nada dibujable, y lo unico que puede haber pasado es
+ * que se llenaran los dos campos en el orden equivocado.
+ */
+export async function updateInitiativeFechas(formData: FormData) {
   await ensureSchema();
   if (!(await requireAdmin())) return;
   const id = Number(formData.get("id"));
-  const due_date = String(formData.get("due_date") || "") || null;
   if (!id) return;
-  await sql!`UPDATE initiatives SET due_date = ${due_date} WHERE id = ${id}`;
+  let start_date = String(formData.get("start_date") || "") || null;
+  let due_date = String(formData.get("due_date") || "") || null;
+  if (start_date && due_date && start_date > due_date) {
+    [start_date, due_date] = [due_date, start_date];
+  }
+  await sql!`UPDATE initiatives SET start_date = ${start_date}, due_date = ${due_date} WHERE id = ${id}`;
   revalidatePath("/cronogramas");
 }
 
