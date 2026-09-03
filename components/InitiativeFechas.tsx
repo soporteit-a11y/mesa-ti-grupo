@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { updateInitiativeFechas } from "@/app/actions";
+import { toYMD } from "@/lib/dates";
 
 /**
  * Fechas de una etapa: inicio y fin, con calendario.
@@ -19,10 +20,16 @@ export function InitiativeFechas({
   id, startDate, dueDate, rango, derivado, desborde,
 }: {
   id: number;
-  /** Inicio fijado a mano, o null si sale del calculo. */
-  startDate: string | null;
-  /** Fin fijado a mano, o null si sale del calculo. */
-  dueDate: string | null;
+  /**
+   * Inicio y fin fijados a mano, o null si salen del calculo.
+   *
+   * Se tipan como `unknown` a proposito: son columnas DATE, y el driver las
+   * devuelve unas veces como texto y otras como objeto Date. Darlas por texto
+   * es lo que ya tumbo /cronogramas una vez (ver toYMD en lib/dates.ts), asi
+   * que aqui pasan siempre por toYMD antes de tocarlas.
+   */
+  startDate: unknown;
+  dueDate: unknown;
   /** Rango efectivo (el fijado si lo hay, si no el calculado), ya formateado. */
   rango: string | null;
   /** Rango calculado de las fases, ya formateado. Solo para explicar. */
@@ -81,11 +88,11 @@ export function InitiativeFechas({
       <input type="hidden" name="id" value={id} />
       <label className="phase-date-lbl">
         Inicio
-        <input type="date" name="start_date" defaultValue={startDate?.slice(0, 10) || ""} autoFocus />
+        <input type="date" name="start_date" defaultValue={toYMD(startDate) || ""} autoFocus />
       </label>
       <label className="phase-date-lbl">
         Fin
-        <input type="date" name="due_date" defaultValue={dueDate?.slice(0, 10) || ""} />
+        <input type="date" name="due_date" defaultValue={toYMD(dueDate) || ""} />
       </label>
       <button type="submit" className="btn sm" title="Guardar">✓</button>
       <button type="button" className="btn sm" onClick={() => setEditando(false)}>Cancelar</button>

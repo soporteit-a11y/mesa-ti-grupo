@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { updatePhase, deletePhase } from "@/app/actions";
 import { Asignado, type OpcionUsuario } from "@/components/Asignado";
 import type { Phase } from "@/lib/data";
+import { toYMD } from "@/lib/dates";
 
 /**
  * Cabecera de una fase. Para el admin se despliega en un pequeño editor con
@@ -68,11 +69,11 @@ export function PhaseHeader({
         <input type="text" name="title" defaultValue={phase.title} className="phase-title-input" required />
         <label className="phase-date-lbl">
           Inicio
-          <input type="date" name="start_date" defaultValue={phase.start_date?.slice(0, 10) || ""} />
+          <input type="date" name="start_date" defaultValue={toYMD(phase.start_date) || ""} />
         </label>
         <label className="phase-date-lbl">
           Fin
-          <input type="date" name="end_date" defaultValue={phase.end_date?.slice(0, 10) || ""} />
+          <input type="date" name="end_date" defaultValue={toYMD(phase.end_date) || ""} />
         </label>
         <button type="submit" className="btn sm" title="Guardar">✓</button>
         <button type="button" className="btn sm" onClick={() => setEditando(false)}>Cancelar</button>
