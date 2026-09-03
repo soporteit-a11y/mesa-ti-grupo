@@ -1,6 +1,7 @@
 import type { Initiative } from "@/lib/data";
 import { diaDeFecha, hoyEnDias, fmtDiaMesAnio } from "@/lib/dates";
 import { GanttBar, GanttLabel, AnchoNombres, DesplegarEtapas } from "@/components/GanttInteractivo";
+import { Collapsible } from "@/components/Collapsible";
 
 const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
 
@@ -90,115 +91,133 @@ export function ProjectOverview({
 
   const posHoy = hoy >= min && hoy <= max ? ((hoy - min) / span) * 100 : null;
 
+  const cabecera = (
+    <div className="po-head">
+      <div>
+        <div className="po-title">
+          Resumen del proyecto <span className="chip" style={{ background: color }}>{company}</span>
+        </div>
+        <div className="po-rango mono">{fechaLarga(min)} → {fechaLarga(max)} · {totalDias} días</div>
+      </div>
+      <div className={"po-veredicto " + (atrasado ? "crit" : adelantado ? "ok" : "warn")}>
+        {atrasado
+          ? `Atrasado ${Math.abs(desfase)} puntos`
+          : adelantado
+          ? `Adelantado ${desfase} puntos`
+          : "En tiempo"}
+      </div>
+    </div>
+  );
+
+  // Vista comprimida: las mismas dos barras comparativas, sin los KPIs
+  // detallados ni el Gantt. Es lo mismo que una tarjeta de cronograma
+  // colapsada muestra su barra de avance — un vistazo, no el detalle.
+  const comparativa = (
+    <div className="po-comp">
+      <div className="po-comp-row">
+        <span className="po-comp-lbl mono">Tiempo</span>
+        <div className="progress-track"><div className="progress-fill tiempo" style={{ width: `${pctTiempo}%` }} /></div>
+        <span className="progress-label mono">{pctTiempo}%</span>
+      </div>
+      <div className="po-comp-row">
+        <span className="po-comp-lbl mono">Avance</span>
+        <div className="progress-track">
+          <div className="progress-fill" style={{ width: `${pctReal}%`, background: atrasado ? "var(--crit)" : color }} />
+        </div>
+        <span className="progress-label mono">{pctReal}%</span>
+      </div>
+    </div>
+  );
+
   return (
     <div className="card po">
-      <div className="po-head">
-        <div>
-          <div className="po-title">
-            Resumen del proyecto <span className="chip" style={{ background: color }}>{company}</span>
+      <Collapsible
+        storageKey={`resumen.${vista}.${company}`}
+        // Arranca cerrado, igual que las tarjetas de cronograma: es un resumen
+        // que se abre para ver el Gantt, no algo que deba ocupar la pantalla
+        // de entrada.
+        defaultOpen={false}
+        head={cabecera}
+        meta={comparativa}
+      >
+        <div className="po-kpis">
+          <div className="po-kpi">
+            <span className="po-k">Tiempo transcurrido</span>
+            <span className="po-v mono">{transcurridos} de {totalDias} d</span>
+            <span className="po-pct mono">{pctTiempo}%</span>
           </div>
-          <div className="po-rango mono">{fechaLarga(min)} → {fechaLarga(max)} · {totalDias} días</div>
-        </div>
-        <div className={"po-veredicto " + (atrasado ? "crit" : adelantado ? "ok" : "warn")}>
-          {atrasado
-            ? `Atrasado ${Math.abs(desfase)} puntos`
-            : adelantado
-            ? `Adelantado ${desfase} puntos`
-            : "En tiempo"}
-        </div>
-      </div>
-
-      <div className="po-kpis">
-        <div className="po-kpi">
-          <span className="po-k">Tiempo transcurrido</span>
-          <span className="po-v mono">{transcurridos} de {totalDias} d</span>
-          <span className="po-pct mono">{pctTiempo}%</span>
-        </div>
-        <div className="po-kpi">
-          <span className="po-k">Avance real</span>
-          <span className="po-v mono">{hechas} de {tareas} tareas</span>
-          <span className={"po-pct mono " + (atrasado ? "crit" : "")}>{pctReal}%</span>
-        </div>
-        <div className="po-kpi">
-          <span className="po-k">Días restantes</span>
-          <span className="po-v mono">{restantes} d</span>
-          <span className="po-pct mono">{Math.max(0, 100 - pctTiempo)}%</span>
-        </div>
-      </div>
-
-      {/* Barra comparativa: cuanto tiempo se consumio vs cuanto trabajo se hizo */}
-      <div className="po-comp">
-        <div className="po-comp-row">
-          <span className="po-comp-lbl mono">Tiempo</span>
-          <div className="progress-track"><div className="progress-fill tiempo" style={{ width: `${pctTiempo}%` }} /></div>
-          <span className="progress-label mono">{pctTiempo}%</span>
-        </div>
-        <div className="po-comp-row">
-          <span className="po-comp-lbl mono">Avance</span>
-          <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${pctReal}%`, background: atrasado ? "var(--crit)" : color }} />
+          <div className="po-kpi">
+            <span className="po-k">Avance real</span>
+            <span className="po-v mono">{hechas} de {tareas} tareas</span>
+            <span className={"po-pct mono " + (atrasado ? "crit" : "")}>{pctReal}%</span>
           </div>
-          <span className="progress-label mono">{pctReal}%</span>
+          <div className="po-kpi">
+            <span className="po-k">Días restantes</span>
+            <span className="po-v mono">{restantes} d</span>
+            <span className="po-pct mono">{Math.max(0, 100 - pctTiempo)}%</span>
+          </div>
         </div>
-      </div>
 
-      <div className="po-acciones">
-        <DesplegarEtapas />
-      </div>
+        {comparativa}
 
-      <AnchoNombres>
-        <div className="gantt-scroll">
-          <div className="gantt-inner po-gantt">
-            <div className="gantt-axis">
-              {marcas.map((mk, k) => (
-                <span key={k} className="gantt-mes" style={{ left: `${mk.pos}%` }}>{mk.etiqueta}</span>
-              ))}
-            </div>
-            <div className="gantt-rows">
-              {marcas.map((mk, k) => (
-                <span key={"g" + k} className="gantt-grid" style={{ left: `${mk.pos}%` }} aria-hidden="true" />
-              ))}
-              {posHoy !== null && (
-                <span className="gantt-hoy" style={{ left: `${posHoy}%` }} title="Hoy">
-                  <span className="gantt-hoy-lbl mono">HOY</span>
-                </span>
-              )}
-              {filas.map((f) => {
-                const izq = ((f.ini - min) / span) * 100;
-                const ancho = Math.max(0.8, ((f.fin - f.ini) / span) * 100);
-                const vencida = f.fin < hoy && f.progress < 100;
-                const clave = `crono.${vista}.${f.id}`;
-                const ancla = `crono-${f.id}`;
-                return (
-                  <div className="gantt-row" key={f.id}>
-                    <GanttLabel storageKey={clave} anchorId={ancla} titulo={f.titulo} />
-                    <div className="gantt-track">
-                      <GanttBar
-                        storageKey={clave}
-                        anchorId={ancla}
-                        titulo={f.titulo}
-                        izq={izq}
-                        ancho={ancho}
-                        progress={f.progress}
-                        color={color}
-                        vencida={vencida}
-                        lista={f.progress === 100}
-                        detalle={`${f.titulo} · ${f.done}/${f.total} tareas · ${f.progress}%`}
-                      />
+        <div className="po-acciones">
+          <DesplegarEtapas />
+        </div>
+
+        <AnchoNombres>
+          <div className="gantt-scroll">
+            <div className="gantt-inner po-gantt">
+              <div className="gantt-axis">
+                {marcas.map((mk, k) => (
+                  <span key={k} className="gantt-mes" style={{ left: `${mk.pos}%` }}>{mk.etiqueta}</span>
+                ))}
+              </div>
+              <div className="gantt-rows">
+                {marcas.map((mk, k) => (
+                  <span key={"g" + k} className="gantt-grid" style={{ left: `${mk.pos}%` }} aria-hidden="true" />
+                ))}
+                {posHoy !== null && (
+                  <span className="gantt-hoy" style={{ left: `${posHoy}%` }} title="Hoy">
+                    <span className="gantt-hoy-lbl mono">HOY</span>
+                  </span>
+                )}
+                {filas.map((f) => {
+                  const izq = ((f.ini - min) / span) * 100;
+                  const ancho = Math.max(0.8, ((f.fin - f.ini) / span) * 100);
+                  const vencida = f.fin < hoy && f.progress < 100;
+                  const clave = `crono.${vista}.${f.id}`;
+                  const ancla = `crono-${f.id}`;
+                  return (
+                    <div className="gantt-row" key={f.id}>
+                      <GanttLabel storageKey={clave} anchorId={ancla} titulo={f.titulo} />
+                      <div className="gantt-track">
+                        <GanttBar
+                          storageKey={clave}
+                          anchorId={ancla}
+                          titulo={f.titulo}
+                          izq={izq}
+                          ancho={ancho}
+                          progress={f.progress}
+                          color={color}
+                          vencida={vencida}
+                          lista={f.progress === 100}
+                          detalle={`${f.titulo} · ${f.done}/${f.total} tareas · ${f.progress}%`}
+                        />
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
-      </AnchoNombres>
+        </AnchoNombres>
 
-      <p className="pv-meta po-nota">
-        Pulsa cualquier barra o nombre para saltar al desglose de esa etapa. El <b>% de avance</b> son
-        tareas marcadas como completadas sobre el total; si va por debajo del <b>% de tiempo</b>, el
-        proyecto está consumiendo calendario más rápido de lo que avanza.
-      </p>
+        <p className="pv-meta po-nota">
+          Pulsa cualquier barra o nombre para saltar al desglose de esa etapa. El <b>% de avance</b> son
+          tareas marcadas como completadas sobre el total; si va por debajo del <b>% de tiempo</b>, el
+          proyecto está consumiendo calendario más rápido de lo que avanza.
+        </p>
+      </Collapsible>
     </div>
   );
 }

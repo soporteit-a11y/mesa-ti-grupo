@@ -21,6 +21,12 @@
 > (`lib/sql.ts`, `lib/session.ts`, `lib/db.ts`) por una restricción del Edge Runtime, no por
 > gusto. La tabla de §5.11 explica qué puede importar cada uno; romper esa regla hace que
 > `middleware.ts` deje de compilar.
+> **Cronogramas (§5.12):** trae importado el cronograma real de SINCO ERP en CMG, con fases,
+> fechas, Gantt interactivo y una línea de tiempo global ("Resumen del proyecto"), todo plegable.
+> **Trampa de esta parte:** `npm run build` **no valida tipos** en este proyecto
+> (`typescript.ignoreBuildErrors: true` en `next.config.mjs`) — un build "exitoso" no descarta
+> errores reales. Corre siempre `npx tsc --noEmit` antes de cualquier push; ya se desplegó código
+> roto una vez por saltarse este paso.
 > **Estado:** en producción y en uso real.
 >
 > **Regla de mantenimiento:** este documento se actualiza en cada cambio del proyecto. Si tocas
@@ -1155,6 +1161,54 @@ siga siendo coherente:
 
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
+
+### 2 de septiembre de 2026 (tanda 7) — El resumen del proyecto también se pliega
+
+Después de los seis cambios generales pedidos sobre Gantt/responsables/plegado (ver la entrada de
+la tanda 6), el usuario pidió puntualmente que `ProjectOverview` ("Resumen del proyecto") se
+comportara como las tarjetas de cronograma: colapsado por defecto, y desplegable al pulsar la
+cabecera.
+
+- `components/ProjectOverview.tsx` ahora envuelve su contenido en el mismo `Collapsible` que usan
+  los cronogramas y las fases. La cabecera (título, chip de empresa, rango, veredicto) es el
+  `head`, siempre visible. Colapsado, se ve la `meta`: las dos barras comparativas
+  Tiempo/Avance — el mismo nivel de detalle que una tarjeta de cronograma colapsada muestra con su
+  barra de progreso, no un resumen distinto inventado para este panel.
+- Al desplegar aparecen los KPIs detallados, el botón "Desplegar todas las etapas" y el Gantt
+  interactivo. La clave de plegado es `resumen.<vista>.<empresa>`, independiente por vista y por
+  empresa.
+- Nada cambia en la interacción ya existente: pulsar una barra o nombre del Gantt sigue abriendo
+  esa etapa concreta y haciendo scroll hasta ella (`components/GanttInteractivo.tsx`, tanda 6).
+
+### 2 de septiembre de 2026 (tanda 6) — Gantt interactivo, etapas cerradas por defecto y responsable por tarea
+
+Seis pedidos generales sobre el módulo, de una vez: (1) el listado de cronogramas debe venir
+cerrado; (2) los nombres largos de fase/etapa deben poder ampliarse; (3) el Gantt debe ser el
+punto de entrada — clic en una barra o su nombre abre esa etapa; (4) la línea de "hoy" es muy fina;
+(5) cada tarea necesita un campo de responsable; (6) sugerencias adicionales.
+
+- **Todas las etapas arrancan cerradas** (`defaultOpen={false}` en el `Collapsible` de cada
+  cronograma). Con 9 etapas y 249 tareas, abrirlas de entrada era justo lo que hacía la página
+  ilegible — el problema que ya se había intentado resolver con el plegado, pero seguía abierto
+  por defecto para los cronogramas sin fases previas.
+- **Interruptor "Ampliar nombres"** en el Gantt (`components/GanttInteractivo.tsx`,
+  `AnchoNombres`): 190px → 340px con texto en varias líneas. Títulos como
+  "ETAPA 4 - SINCO · A&F — BD Secundaria 1" no cabían y quedaban cortados sin forma de leerlos
+  enteros.
+- **El Gantt pasa a ser el índice del proyecto.** Cada barra (`GanttBar`) y cada nombre
+  (`GanttLabel`) son botones: al pulsarlos, despliegan esa etapa concreta (disparan el mismo
+  evento `mesati:plegar` que usan los botones de Expandir/Contraer) y hacen scroll hasta ella.
+  Nuevo botón "Desplegar todas las etapas" en el resumen. Esto obligó a corregir la coincidencia
+  de alcance del evento en `Collapsible.tsx`: un alcance terminado en punto (`"crono."`) es un
+  grupo y coincide por prefijo; cualquier otro (una clave concreta) tiene que coincidir exacto.
+  Sin esa distinción, abrir `crono.lista.12` abría también `crono.lista.123`.
+- **La línea de "hoy"** pasa de 1px a 3px, opaca, con sombra de contraste y una etiqueta "HOY" —
+  antes casi no se distinguía del resto de la cuadrícula.
+- **Responsable por tarea.** La columna `owner` ya existía (viene del Excel de SINCO) pero no se
+  mostraba ni se podía editar. Ahora aparece en cada tarea (`components/TaskOwner.tsx`) y el admin
+  la edita en línea. Es **texto libre con autocompletado** de los valores ya usados, no un
+  desplegable de colaboradores del sistema: los responsables del cronograma de SINCO son
+  "SINCOSOFT", "MESSINA", "SINCOSOFT - MESSINA" — empresas, no personas con cuenta aquí.
 
 ### 2 de septiembre de 2026 (tanda 5) — Reestructurar las fases de SINCO (la v1 era incomprensible)
 
