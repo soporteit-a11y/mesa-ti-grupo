@@ -85,5 +85,11 @@ export const config = {
   // Se excluyen los archivos internos de Next y cualquier ruta con extension
   // (imagenes, favicon): si no, cada asset estatico gastaria una consulta a la
   // base para resolver la sesion.
-  matcher: ["/((?!_next/|.*\\.).*)"],
+  //
+  // Tambien /api/: esas rutas las llama el cron de Vercel, que no trae cookie
+  // de sesion — el middleware la mandaria al login y el aviso no se enviaria
+  // nunca. Cada ruta bajo /api/ se protege por su cuenta (la de recordatorios,
+  // con CRON_SECRET), que es lo correcto: no todas se autentican como una
+  // pagina, y hacerlo ahi deja explicito quien puede llamarla.
+  matcher: ["/((?!_next/|api/|.*\\.).*)"],
 };

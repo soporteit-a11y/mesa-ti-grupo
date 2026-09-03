@@ -22,6 +22,8 @@ import { DeleteInitiativeButton } from "@/components/DeleteInitiativeButton";
 import { FiltersCompanyClient } from "@/components/FiltersCompanyClient";
 import { AtrasoEtapa } from "@/components/AtrasoEtapa";
 import { calcularAtraso } from "@/lib/atraso";
+import { AvisoVencimientos } from "@/components/AvisoVencimientos";
+import { getPendientes } from "@/lib/recordatorios";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +64,15 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
     ]);
   } catch (e) {
     return <Setup />;
+  }
+
+  // Lo que vence esta semana. Solo de las empresas que esta persona ve, para
+  // que un colaborador no reciba avisos de proyectos que ni puede abrir.
+  let pendientes: Awaited<ReturnType<typeof getPendientes>> = [];
+  try {
+    pendientes = await getPendientes(visibles);
+  } catch (e) {
+    // El aviso es un extra: si falla, la pagina sigue sirviendo para lo suyo.
   }
 
   // El colaborador solo ve los cronogramas de las empresas que tenga asignadas
@@ -119,6 +130,7 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
       </div>
 
       <div className="content">
+        <AvisoVencimientos items={pendientes} mio={!esAdmin} />
         <div className="filters">
           <FiltersCompanyClient companies={companies} />
           <div className="vista-toggle">

@@ -108,3 +108,54 @@ export function emailCuentaAprobada(nombre: string, link: string): { subject: st
     `),
   };
 }
+
+/**
+ * Aviso de lo que vence esta semana.
+ *
+ * Va en una sola tabla y sin adornos: quien lo recibe necesita saber que le
+ * toca y cuando, no leer un boletin. Se ordena por lo que vence antes, y lo que
+ * vence hoy o manana se marca, porque es lo unico que exige accion inmediata.
+ */
+export function emailVencimientos(
+  nombre: string,
+  items: { tipo: string; titulo: string; etapa: string; empresa: string; vence: string; diasRestantes: number }[],
+  link: string,
+): { subject: string; html: string } {
+  const filas = items
+    .map((i) => {
+      const urgente = i.diasRestantes <= 1;
+      const cuando =
+        i.diasRestantes === 0 ? "hoy" : i.diasRestantes === 1 ? "mañana" : `en ${i.diasRestantes} días`;
+      return `
+        <tr>
+          <td style="padding:7px 10px;border-bottom:1px solid #eee;font-size:13px;">
+            <b>${escapar(i.titulo)}</b>
+            <div style="color:#888;font-size:11px;">${escapar(i.empresa)} · ${escapar(i.etapa)} · ${i.tipo}</div>
+          </td>
+          <td style="padding:7px 10px;border-bottom:1px solid #eee;font-size:12px;white-space:nowrap;${urgente ? "color:#c0392b;font-weight:700;" : "color:#555;"}">
+            ${escapar(i.vence)}<br><span style="font-size:11px;">${cuando}</span>
+          </td>
+        </tr>`;
+    })
+    .join("");
+
+  return {
+    subject: `${items.length} ${items.length === 1 ? "cosa vence" : "cosas vencen"} esta semana — Mesa TI`,
+    html: envoltorio(`
+      <p>Hola ${escapar(nombre)},</p>
+      <p>Esto vence dentro de los próximos 7 días y todavía no está terminado:</p>
+      <table style="width:100%;border-collapse:collapse;margin:12px 0;">${filas}</table>
+      <p><a href="${link}" style="color:#4a7a2a;">Abrir cronogramas</a></p>
+    `),
+  };
+}
+
+/**
+ * Escapa texto que va dentro del HTML del correo. Los titulos de fases y tareas
+ * los escribe gente, y un "<" suelto romperia la maqueta del mensaje.
+ */
+function escapar(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}

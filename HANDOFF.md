@@ -1177,6 +1177,64 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
+### 3 de septiembre de 2026 (tanda 15) — Retraso por etapa, fechas reales, avisos y pantallas de trabajo
+
+**1. Cada etapa lleva su propio retraso** (`lib/atraso.ts`, `components/AtrasoEtapa.tsx`).
+Se calcula solo con lo suyo: su calendario y su avance. El veredicto de empresa promediaba
+etapas sanas con etapas enfermas y escondía cuál iba mal. Al pulsar el cuadrito se abre el
+desglose — calendario consumido contra avance, días desde la fecha de fin, fases vencidas y
+tareas fuera de fecha.
+
+- La etiqueta prioriza el **hecho duro** sobre la estimación: «Vencida hace 12 d» se entiende
+  sin explicación, «Atrasada 9 puntos» no. El desfase en puntos solo aparece cuando aún no
+  vence nada.
+- Si la etapa va bien **no se dibuja nada**. Un cuadrito verde en cada tarjeta sería ruido
+  compitiendo por atención con los que sí importan.
+
+**2. Fecha coordinada frente a fecha realizada** (`initiative_tasks.done_at`). `end_date` es
+cuándo se acordó; `done_at` es cuándo se hizo. Tener las dos es lo que convierte «hecho» en
+«hecho a tiempo» o «hecho con 12 días de retraso», y es lo que alimenta el punto 1.
+
+- Se rellena sola al marcar, con la fecha de **RD**, no UTC (`hoyEnRD()`): marcar a las 9 de la
+  noche no puede quedar fechado mañana. Se corrige a mano con `setTaskDoneAt`, porque marcar en
+  el sistema y hacer el trabajo no siempre pasan el mismo día.
+- Las tareas ya marcadas antes de existir la columna quedan en NULL y se muestran como **«sin
+  fecha»**. No se puede saber cuándo se hicieron, y no se inventa ni con hoy ni con la coordinada.
+- `hoy` se calcula **una vez en el servidor** y baja como prop. Recalcularlo en cada componente
+  cliente arriesga que servidor y navegador caigan en días distintos y la hidratación no cuadre.
+
+**3. Avisos de vencimiento a 7 días** (`lib/recordatorios.ts`, `app/api/recordatorios/route.ts`,
+`vercel.json`, `components/AvisoVencimientos.tsx`). Dos canales que se complementan: el correo
+te busca a ti, el aviso en pantalla te espera donde trabajas.
+
+- **Un correo por persona y por día, no uno por tarea.** Seis vencimientos = un correo con seis
+  filas. La diferencia entre un sistema que se lee y uno que se filtra a la papelera está ahí.
+- **Lo ya vencido no entra.** Para eso está el cuadrito del punto 1, permanente. Un correo
+  diario repitiendo algo que ya pasó solo entrena a la gente a ignorar los correos.
+- Lo que **no tiene a nadie asignado** va a los administradores: es lo que más riesgo tiene de
+  que no lo mire nadie.
+- Idempotente por día vía la tabla `meta`; un cron puede dispararse dos veces. **Pero si el
+  correo no está configurado, el día NO se marca como enviado** — así, cuando exista
+  `RESEND_API_KEY`, el siguiente disparo hace el trabajo en vez de creer que ya lo hizo.
+- El middleware deja de interceptar `/api/`: el cron no trae cookie y lo mandaba al login. Cada
+  ruta bajo `/api/` se protege por su cuenta (esta, con `CRON_SECRET`).
+- **El aviso en pantalla funciona ya**, sin depender de Resend, y respeta la visibilidad por
+  empresa: un colaborador no ve vencimientos de proyectos que no puede abrir.
+
+**4. Responsive para las pantallas que se usan de verdad.** Los cortes existentes estaban
+pensados para móvil (≤820px), pero aquí casi nadie entra desde un teléfono. El problema real
+era el **portátil**: con la barra lateral de 244px, un 1366×768 deja 1120px, y las tarjetas de
+etapa a dos columnas quedaban a 545px con título, fechas, estado y retraso peleándose el sitio.
+
+- Una sola columna de etapas por debajo de **1280px** (antes solo por debajo de 680px, o sea
+  nunca en un portátil).
+- Barra lateral más estrecha entre 821 y 1180px, en vez de robarle sitio al trabajo.
+- Corte por **altura** (≤820px de alto): se recorta el relleno vertical del armazón, no el
+  contenido — en un 1366×768 sobra ancho y falta alto.
+- Monitores grandes: tres columnas a partir de 2300px, en vez de tarjetas gigantes con aire.
+- `overflow-x: hidden` en el body; lo ancho de verdad (el Gantt) hace su propio scroll dentro
+  de su caja.
+
 ### 3 de septiembre de 2026 (tanda 14) — Cada etapa puede declarar su ventana, y el Gantt la respeta
 
 - **El lápiz de las fechas de una etapa ahora edita inicio Y fin** con calendario, no solo una

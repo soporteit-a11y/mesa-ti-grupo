@@ -1119,3 +1119,91 @@ code { font-family: var(--font-mono); font-size: 12.5px; background: var(--surfa
 .tf-form { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; margin: 0; }
 .tf-lbl { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--muted); }
 .tf-lbl input { font-family: var(--font-mono); font-size: 11px; padding: 3px 5px; color: var(--ink-soft); }
+
+/* Aviso de vencimientos (components/AvisoVencimientos.tsx). */
+.av { border: 1px solid var(--high); background: var(--high-w); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; }
+.av.urge { border-color: var(--crit); background: var(--crit-w); }
+.av-head {
+  width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  background: none; border: 0; color: var(--ink); cursor: pointer; text-align: left; font: inherit;
+}
+.av-head:hover { filter: brightness(1.1); }
+.av-punto { width: 8px; height: 8px; border-radius: 50%; background: var(--high); flex: none; }
+.av.urge .av-punto { background: var(--crit); }
+.av-txt { flex: 1; font-size: 13px; }
+.av-urg { color: var(--crit); font-weight: 600; }
+.av-mas { font-size: 11px; color: var(--muted); }
+.av-lista { list-style: none; margin: 0; padding: 0 14px 12px; display: flex; flex-direction: column; gap: 6px; }
+.av-lista li { display: flex; gap: 10px; align-items: flex-start; }
+.av-dias {
+  font-size: 10px; font-weight: 700; min-width: 52px; text-align: center; flex: none;
+  padding: 2px 6px; border-radius: 5px; border: 1px solid var(--high); color: var(--high);
+}
+.av-dias.urge { border-color: var(--crit); color: var(--crit); }
+.av-item { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.av-item-t { font-size: 12.5px; }
+.av-item-m { font-size: 10.5px; color: var(--muted); }
+
+/* ============================================================
+   Pantallas de trabajo reales: portátiles y monitores
+   ============================================================
+   Los cortes de abajo estaban pensados para móvil (820px y menos), pero aquí
+   casi nadie entra desde un teléfono: se entra desde portátiles de 1366x768,
+   equipos de 1920x1080 y monitores grandes. El problema no era el móvil, era
+   el portátil — con la barra lateral de 244px, un 1366 deja 1120px de
+   contenido, y ahí las tarjetas de etapa a dos columnas quedan a 545px cada
+   una, con el título, las fechas, el estado y el retraso peleándose por el
+   sitio. */
+
+/* Portátil estándar y cualquier ventana estrecha: una sola columna de etapas.
+   Antes esto solo pasaba por debajo de 680px, o sea nunca en un portátil. */
+@media (max-width: 1280px) {
+  .g2 { grid-template-columns: 1fr; }
+  .content { padding: 20px 20px 52px; }
+}
+
+/* Portátiles pequeños y ventanas a media pantalla: la barra lateral se encoge
+   en vez de robarle sitio al trabajo. */
+@media (max-width: 1180px) and (min-width: 821px) {
+  .app { grid-template-columns: 200px 1fr; }
+  .navlink { padding: 8px 9px; font-size: 13px; }
+}
+
+/* Pantallas BAJAS (1366x768 y portátiles de 13"): sobra ancho y falta alto.
+   Se recorta el relleno vertical del armazón, no el contenido. */
+@media (max-height: 820px) and (min-width: 821px) {
+  .topbar { padding: 12px 22px; }
+  .content { padding-top: 16px; padding-bottom: 40px; }
+  .section-title { margin: 18px 0 10px; }
+  .sidebar { padding: 14px 12px; gap: 4px; }
+  .brand { padding: 4px 8px 12px; }
+}
+
+/* Monitores grandes: más columnas en vez de tarjetas gigantes con aire dentro. */
+@media (min-width: 1700px) {
+  .g2 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 2300px) {
+  .content { max-width: 2200px; }
+  .g2 { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Nada debe forzar scroll horizontal en la página. Lo ancho de verdad —el
+   Gantt, la línea de tiempo— hace su propio scroll dentro de su caja. */
+body { overflow-x: hidden; }
+.gantt-scroll { overflow-x: auto; max-width: 100%; }
+.card, .panel, .clp { min-width: 0; }
+
+/* Los elementos nuevos, cuando el sitio aprieta */
+@media (max-width: 1024px) {
+  /* El desglose del retraso se ancla a la derecha: pegado a la izquierda se
+     salía de la pantalla en las tarjetas del borde derecho. */
+  .ae-panel { left: auto; right: 0; }
+  .init-due-row { flex-wrap: wrap; row-gap: 6px; }
+  .tf { flex-wrap: wrap; }
+}
+@media (max-width: 720px) {
+  .av-dias { min-width: 44px; }
+  .av-lista li { gap: 7px; }
+  .ae-panel { width: min(290px, calc(100vw - 40px)); }
+}
