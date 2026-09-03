@@ -3,6 +3,22 @@
 import { useState } from "react";
 
 /**
+ * Abre la etapa indicada y hace scroll hasta ella. Compartida por las barras
+ * del Gantt, sus etiquetas y el detalle del atraso: las tres hacen exactamente
+ * lo mismo desde sitios distintos.
+ */
+export function irAEtapa(storageKey: string, anchorId: string) {
+  window.dispatchEvent(
+    new CustomEvent("mesati:plegar", { detail: { abrir: true, alcance: storageKey } })
+  );
+  // El bloque tarda un frame en montarse tras abrirse; sin el retardo el
+  // scroll apunta a un elemento que todavia mide 0.
+  setTimeout(() => {
+    document.getElementById(anchorId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 60);
+}
+
+/**
  * Barra del Gantt que lleva al detalle de su etapa.
  *
  * Al pulsarla despliega el bloque correspondiente (le manda el mismo evento que

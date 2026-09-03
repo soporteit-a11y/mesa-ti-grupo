@@ -2,6 +2,8 @@ import type { Initiative } from "@/lib/data";
 import { diaDeFecha, hoyEnDias, fmtDiaMesAnio } from "@/lib/dates";
 import { GanttBar, GanttLabel, AnchoNombres, DesplegarEtapas } from "@/components/GanttInteractivo";
 import { Collapsible } from "@/components/Collapsible";
+import { VeredictoDesfase, type FaseAtrasada } from "@/components/VeredictoDesfase";
+import { fmtDiaMesAnio as fmtFecha } from "@/lib/dates";
 
 const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
 
@@ -81,6 +83,29 @@ export function ProjectOverview({
   const atrasado = desfase < -5;
   const adelantado = desfase > 5;
 
+  // Fases cuya fecha de fin ya pasó y siguen incompletas: es la respuesta
+  // concreta a "¿atrasado en qué?". El número de fase es su posición dentro de
+  // su cronograma, igual que se muestra en la lista.
+  const atrasadas: FaseAtrasada[] = [];
+  for (const i of initiatives) {
+    i.phases.forEach((p, idx) => {
+      const fin = diaDeFecha(p.end_date);
+      if (fin === null || fin >= hoy || p.progress === 100) return;
+      atrasadas.push({
+        cronoId: i.id,
+        cronoTitulo: i.title,
+        fase: p.title,
+        numero: idx + 1,
+        finTexto: fmtFecha(p.end_date) ?? "—",
+        diasAtraso: hoy - fin,
+        done: p.done,
+        total: p.total,
+        progress: p.progress,
+      });
+    });
+  }
+  atrasadas.sort((a, b) => b.diasAtraso - a.diasAtraso);
+
   const marcas: { pos: number; etiqueta: string }[] = [];
   const d0 = new Date(min * 86400000);
   let y = d0.getUTCFullYear();
@@ -105,13 +130,20 @@ export function ProjectOverview({
         </div>
         <div className="po-rango mono">{fechaLarga(min)} → {fechaLarga(max)} · {totalDias} días</div>
       </div>
-      <div className={"po-veredicto " + (atrasado ? "crit" : adelantado ? "ok" : "warn")}>
-        {atrasado
-          ? `Atrasado ${Math.abs(desfase)} puntos`
-          : adelantado
-          ? `Adelantado ${desfase} puntos`
-          : "En tiempo"}
-      </div>
+      <VeredictoDesfase
+        cls={atrasado ? "crit" : adelantado ? "ok" : "warn"}
+        texto={
+          atrasado
+            ? `Atrasado ${Math.abs(desfase)} puntos`
+            : adelantado
+            ? `Adelantado ${desfase} puntos`
+            : "En tiempo"
+        }
+        pctTiempo={pctTiempo}
+        pctReal={pctReal}
+        atrasadas={atrasadas}
+        vista={vista}
+      />
     </div>
   );
 

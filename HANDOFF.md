@@ -1177,6 +1177,33 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
+### 3 de septiembre de 2026 (tanda 13) — El atraso se puede investigar, y las fases/tareas se asignan a usuarios
+
+- **El veredicto "Atrasado N puntos" deja de ser un cartel y pasa a ser un botón**
+  (`components/VeredictoDesfase.tsx`). Al pulsarlo se despliega un panel que responde la pregunta
+  obvia — *¿atrasado en qué?* — con dos cosas: (a) la explicación del número (el % de calendario
+  consumido contra el % de tareas hechas, y que la diferencia son esos puntos), y (b) la lista de
+  **fases cuya fecha de fin ya venció y siguen incompletas**, ordenadas por días de atraso, con
+  cuántas tareas llevan. Cada una es clicable y lleva al desglose de su etapa.
+- Ese salto reusa `irAEtapa()`, extraída de `GanttInteractivo.tsx`: las barras del Gantt, sus
+  etiquetas y ahora este panel hacían exactamente lo mismo desde tres sitios distintos.
+- **Caso que hay que explicar y no esconder:** puede haber desfase en puntos y **cero** fases
+  vencidas — pasa cuando el atraso viene de tareas sin marcar dentro de fases que todavía están en
+  plazo. El panel lo dice con esas palabras en vez de mostrar una lista vacía.
+- **Asignación de usuarios a fases y tareas.** Columnas nuevas `assigned_user_id` en
+  `initiative_phases` e `initiative_tasks` (`ON DELETE SET NULL`: borrar una cuenta no puede borrar
+  trabajo). `components/Asignado.tsx` muestra un chip con las iniciales y el nombre, y para el
+  admin es un desplegable que asigna al instante.
+- **Es distinto de `owner`, y los dos conviven a propósito:** `owner` es texto libre que vino del
+  Excel del proveedor ("SINCOSOFT", "MESSINA") y dice **qué empresa** responde; `assigned_user_id`
+  dice **qué persona de aquí** lo tiene asignado.
+- **Solo se puede asignar a quien puede ver esa empresa.** El desplegable ya llega filtrado por
+  `company_id` del cronograma, y `assignTask`/`assignPhase` lo **revalidan en el servidor**
+  (`puedeAsignarse()`): admin siempre, el resto solo si tiene esa empresa en `user_companies`.
+  Asignarle una fase a alguien que no puede ni abrir el cronograma no serviría de nada.
+- `getAsignables()` excluye las cuentas sin aprobar: asignarle trabajo a alguien que todavía no
+  puede entrar no tiene sentido. Y solo se consulta si quien mira es admin — los demás no asignan.
+
 ### 3 de septiembre de 2026 (tanda 12) — Rediseño de las tarjetas de usuario en /config
 
 El usuario dijo que los cuadros de usuario se veían desorganizados y ocupaban mucho espacio.

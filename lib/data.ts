@@ -263,15 +263,50 @@ export type Task = {
   id: number; title: string; done: boolean;
   phase_id: number | null;
   start_date: string | null; end_date: string | null;
-  owner: string | null; context: string | null;
+  /** Texto libre del Excel del proveedor: "SINCOSOFT", "MESSINA". */
+  owner: string | null;
+  context: string | null;
+  /** Usuario del sistema asignado, si hay. */
+  assigned_user_id: number | null;
+  assigned_name: string | null;
 };
 
 export type Phase = {
   id: number; title: string; stage: string | null; context: string | null;
   start_date: string | null; end_date: string | null;
+  assigned_user_id: number | null;
+  assigned_name: string | null;
   tasks: Task[];
   total: number; done: number; progress: number;
 };
+
+/** Cuenta que puede recibir asignaciones, con las empresas que ve. */
+export type Asignable = { id: number; name: string; role: string; company_ids: number[] };
+
+/**
+ * Usuarios a los que se les puede asignar una fase o tarea. Se excluyen las
+ * cuentas sin aprobar: asignarle trabajo a alguien que todavia no puede entrar
+ * no tiene sentido. El admin sale siempre (ve todas las empresas); los demas,
+ * con la lista de empresas que tienen asignada, para que cada cronograma solo
+ * ofrezca a quien de verdad puede verlo.
+ */
+export async function getAsignables(): Promise<Asignable[]> {
+  await ensureSchema();
+  const rows = await sql!`
+    SELECT u.id, u.name, u.role,
+      COALESCE(ARRAY_AGG(uc.company_id) FILTER (WHERE uc.company_id IS NOT NULL), '{}') AS company_ids
+    FROM users u LEFT JOIN user_companies uc ON uc.user_id = u.id
+    WHERE u.approved = true
+    GROUP BY u.id ORDER BY u.name`;
+  return (rows as any[]).map((r) => ({
+    id: r.id,
+    name: r.name,
+    role: r.role,
+    company_ids: Array.isArray(r.company_ids)
+      ? r.company_ids.map(Number)
+      : String(r.company_ids || "").replace(/[{}]/g, "").split(",").filter(Boolean).map(Number),
+  }));
+}
 
 export type Initiative = {
   id: number;
@@ -318,11 +353,15 @@ export async function getInitiatives(): Promise<Initiative[]> {
     FROM initiatives i JOIN companies c ON c.id = i.company_id
     ORDER BY c.name, i.id`;
   const phases = await q`
-    SELECT id, initiative_id, title, stage, context, start_date, end_date
-    FROM initiative_phases ORDER BY position, id`;
+    SELECT p.id, p.initiative_id, p.title, p.stage, p.context, p.start_date, p.end_date,
+           p.assigned_user_id, u.name AS assigned_name
+    FROM initiative_phases p LEFT JOIN users u ON u.id = p.assigned_user_id
+    ORDER BY p.position, p.id`;
   const tasks = await q`
-    SELECT id, initiative_id, phase_id, title, done, start_date, end_date, owner, context
-    FROM initiative_tasks ORDER BY position, id`;
+    SELECT t.id, t.initiative_id, t.phase_id, t.title, t.done, t.start_date, t.end_date,
+           t.owner, t.context, t.assigned_user_id, u.name AS assigned_name
+    FROM initiative_tasks t LEFT JOIN users u ON u.id = t.assigned_user_id
+    ORDER BY t.position, t.id`;
 
   return (inits as any[]).map((i) => {
     const t = (tasks as any[]).filter((x) => x.initiative_id === i.id) as Task[];

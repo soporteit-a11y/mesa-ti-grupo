@@ -9,7 +9,7 @@ import type { Phase } from "@/lib/data";
 export { fmtRangoFechas as fmtRango } from "@/lib/dates";
 
 export function PhaseBlock({
-  initiativeId, phase, color, canEdit, canCheck, numero, responsables = [],
+  initiativeId, phase, color, canEdit, canCheck, numero, responsables = [], asignables = [],
 }: {
   initiativeId: number;
   phase: Phase;
@@ -18,6 +18,8 @@ export function PhaseBlock({
   numero: number;
   /** Responsables ya usados en el sistema, para autocompletar. */
   responsables?: string[];
+  /** Usuarios que pueden ver esta empresa, para asignar fase y tareas. */
+  asignables?: { id: number; name: string }[];
   /** Admin: puede renombrar la fase, cambiar fechas, agregar y borrar tareas. */
   canEdit: boolean;
   /** Puede marcar tareas como completadas. */
@@ -39,7 +41,7 @@ export function PhaseBlock({
     <Collapsible
       storageKey={`fase.${phase.id}`}
       className={"phase-block" + (completa ? " completa" : "")}
-      head={<PhaseHeader phase={phase} rango={rango} canEdit={canEdit} numero={numero} />}
+      head={<PhaseHeader phase={phase} rango={rango} canEdit={canEdit} numero={numero} asignables={asignables} />}
       meta={barra}
     >
       {barra}
@@ -53,6 +55,7 @@ export function PhaseBlock({
           readOnly={!canCheck}
           responsables={responsables}
           canEditOwner={canEdit}
+          asignables={asignables}
         />
       )}
       {canEdit && <AddTaskForm initiativeId={initiativeId} phaseId={phase.id} />}

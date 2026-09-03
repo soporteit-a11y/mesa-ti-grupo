@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { updatePhase, deletePhase } from "@/app/actions";
+import { Asignado, type OpcionUsuario } from "@/components/Asignado";
 import type { Phase } from "@/lib/data";
 
 /**
@@ -11,11 +12,13 @@ import type { Phase } from "@/lib/data";
  * querer al leer un cronograma largo.
  */
 export function PhaseHeader({
-  phase, rango, canEdit, numero,
+  phase, rango, canEdit, numero, asignables = [],
 }: {
   phase: Phase; rango: string | null; canEdit: boolean;
   /** Posicion de la fase dentro del cronograma, empezando en 1. */
   numero: number;
+  /** Usuarios que pueden ver esta empresa, para asignar la fase. */
+  asignables?: OpcionUsuario[];
 }) {
   const [editando, setEditando] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -31,6 +34,14 @@ export function PhaseHeader({
           {phase.context ? <span className="phase-ctx" title={phase.context}>{phase.context}</span> : null}
         </div>
         <div className="phase-meta">
+          <Asignado
+            tipo="fase"
+            id={phase.id}
+            asignadoId={phase.assigned_user_id}
+            asignadoNombre={phase.assigned_name}
+            opciones={asignables}
+            canEdit={canEdit}
+          />
           {rango ? <span className="phase-dates mono">{rango}</span> : <span className="phase-dates mono sin">Por definir</span>}
           <span className="phase-pct mono">{phase.progress}%</span>
           {canEdit && (

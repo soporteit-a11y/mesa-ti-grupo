@@ -3,9 +3,11 @@
 import { useRef, useState } from "react";
 import { toggleTask, updateTaskTitle, deleteTask } from "@/app/actions";
 import { TaskOwner } from "@/components/TaskOwner";
+import { Asignado, type OpcionUsuario } from "@/components/Asignado";
 
 export function TaskItem({
   id, done, title, locked = false, readOnly = false, context, fecha, owner, responsables = [], canEditOwner = false,
+  asignadoId = null, asignadoNombre = null, asignables = [],
 }: {
   id: number; done: boolean; title: string;
   /** Sub-grupo del Excel del que venia la tarea. Solo informativo. */
@@ -17,6 +19,11 @@ export function TaskItem({
   /** Valores de responsable ya usados, para el autocompletado. */
   responsables?: string[];
   canEditOwner?: boolean;
+  /** Usuario del sistema asignado a esta tarea. */
+  asignadoId?: number | null;
+  asignadoNombre?: string | null;
+  /** Usuarios que pueden ver esta empresa, para el desplegable. */
+  asignables?: OpcionUsuario[];
   /**
    * Rol colaborador: puede marcar la tarea como hecha, pero no renombrarla ni
    * eliminarla. Por defecto false, asi la vista del admin no cambia.
@@ -71,6 +78,15 @@ export function TaskItem({
         />
       </form>
       )}
+
+      <Asignado
+        tipo="tarea"
+        id={id}
+        asignadoId={asignadoId}
+        asignadoNombre={asignadoNombre}
+        opciones={asignables}
+        canEdit={canEditOwner}
+      />
 
       <TaskOwner id={id} owner={owner ?? null} sugerencias={responsables} canEdit={canEditOwner} />
 

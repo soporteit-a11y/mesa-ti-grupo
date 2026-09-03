@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { reorderTasks } from "@/app/actions";
 import { TaskItem } from "@/components/TaskItem";
+import { type OpcionUsuario } from "@/components/Asignado";
 import { fmtDiaMes } from "@/lib/dates";
 
 type Task = {
   id: number; done: boolean; title: string;
   context?: string | null; start_date?: string | null; end_date?: string | null;
   owner?: string | null;
+  assigned_user_id?: number | null; assigned_name?: string | null;
 };
 
 /** Fecha corta de la tarea (la de fin, o la de inicio si no hay fin). */
@@ -18,6 +20,7 @@ function fechaCorta(t: Task): string | null {
 
 export function TaskList({
   initiativeId, tasks, locked = false, readOnly = false, responsables = [], canEditOwner = false,
+  asignables = [],
 }: {
   initiativeId: number; tasks: Task[];
   /** Rol colaborador: solo marcar/desmarcar. Sin reordenar, renombrar ni borrar. */
@@ -27,6 +30,8 @@ export function TaskList({
   /** Responsables ya usados, para autocompletar. */
   responsables?: string[];
   canEditOwner?: boolean;
+  /** Usuarios que pueden ver esta empresa, para asignar tareas. */
+  asignables?: OpcionUsuario[];
 }) {
   const [items, setItems] = useState<Task[]>(tasks);
   const dragIndex = useRef<number | null>(null);
@@ -80,6 +85,9 @@ export function TaskList({
               owner={t.owner}
               responsables={responsables}
               canEditOwner={canEditOwner}
+              asignadoId={t.assigned_user_id}
+              asignadoNombre={t.assigned_name}
+              asignables={asignables}
               locked
               readOnly={readOnly}
             />
@@ -122,6 +130,9 @@ export function TaskList({
             owner={t.owner}
             responsables={responsables}
             canEditOwner={canEditOwner}
+            asignadoId={t.assigned_user_id}
+            asignadoNombre={t.assigned_name}
+            asignables={asignables}
           />
         </div>
       ))}

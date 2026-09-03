@@ -747,6 +747,65 @@ export async function updateTaskOwner(formData: FormData) {
   revalidatePath("/cronogramas");
 }
 
+/**
+ * Comprueba que a ese usuario se le pueda asignar trabajo de esa empresa: o es
+ * admin (ve todo) o tiene la empresa asignada en /config. Asignarle una fase a
+ * alguien que no puede ni abrir el cronograma no serviria de nada, y la
+ * interfaz ya filtra el desplegable — esto lo garantiza tambien en el servidor.
+ */
+async function puedeAsignarse(userId: number, companyId: number): Promise<boolean> {
+  const rows = await sql!`
+    SELECT 1 FROM users u
+    WHERE u.id = ${userId} AND u.approved = true
+      AND (u.role = 'admin' OR EXISTS (
+        SELECT 1 FROM user_companies uc
+        WHERE uc.user_id = u.id AND uc.company_id = ${companyId}
+      ))`;
+  return rows.length > 0;
+}
+
+/** Asigna (o quita, con valor vacio) el usuario responsable de una tarea. */
+export async function assignTask(formData: FormData) {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+  const id = Number(formData.get("id"));
+  const raw = String(formData.get("user_id") || "");
+  if (!id) return;
+
+  if (!raw) {
+    await sql!`UPDATE initiative_tasks SET assigned_user_id = NULL WHERE id = ${id}`;
+  } else {
+    const userId = Number(raw);
+    const emp = await sql!`
+      SELECT i.company_id FROM initiative_tasks t
+      JOIN initiatives i ON i.id = t.initiative_id WHERE t.id = ${id}`;
+    if (!emp[0] || !(await puedeAsignarse(userId, emp[0].company_id))) return;
+    await sql!`UPDATE initiative_tasks SET assigned_user_id = ${userId} WHERE id = ${id}`;
+  }
+  revalidatePath("/cronogramas");
+}
+
+/** Asigna (o quita) el usuario responsable de una fase completa. */
+export async function assignPhase(formData: FormData) {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+  const id = Number(formData.get("id"));
+  const raw = String(formData.get("user_id") || "");
+  if (!id) return;
+
+  if (!raw) {
+    await sql!`UPDATE initiative_phases SET assigned_user_id = NULL WHERE id = ${id}`;
+  } else {
+    const userId = Number(raw);
+    const emp = await sql!`
+      SELECT i.company_id FROM initiative_phases p
+      JOIN initiatives i ON i.id = p.initiative_id WHERE p.id = ${id}`;
+    if (!emp[0] || !(await puedeAsignarse(userId, emp[0].company_id))) return;
+    await sql!`UPDATE initiative_phases SET assigned_user_id = ${userId} WHERE id = ${id}`;
+  }
+  revalidatePath("/cronogramas");
+}
+
 /** Mueve una tarea a otra fase, o la deja sin fase si phase_id viene vacio. */
 export async function updateTaskPhase(formData: FormData) {
   await ensureSchema();

@@ -66,6 +66,12 @@ async function init(q: NonNullable<typeof sql>) {
   // absorbio de un nivel mas profundo. Se muestra como etiqueta pequena en vez
   // de meterlo en el titulo, que ya de por si es largo.
   await q`ALTER TABLE initiative_tasks ADD COLUMN IF NOT EXISTS context TEXT`;
+  // Usuario del sistema asignado. Distinto de `owner`, que es texto libre y
+  // viene del Excel del proveedor ("SINCOSOFT", "MESSINA"): eso dice que
+  // empresa responde, esto dice que persona de aqui lo tiene asignado.
+  // ON DELETE SET NULL: borrar una cuenta no puede borrar trabajo.
+  await q`ALTER TABLE initiative_tasks ADD COLUMN IF NOT EXISTS assigned_user_id INT REFERENCES users(id) ON DELETE SET NULL`;
+  await q`ALTER TABLE initiative_phases ADD COLUMN IF NOT EXISTS assigned_user_id INT REFERENCES users(id) ON DELETE SET NULL`;
   await q`ALTER TABLE initiatives ADD COLUMN IF NOT EXISTS start_date DATE`;
   await q`CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)`;
   await q`CREATE TABLE IF NOT EXISTS collaborators (

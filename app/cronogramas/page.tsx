@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { hasDb } from "@/lib/db";
-import { getInitiatives, getCompanies, getVisibleCompanyIds } from "@/lib/data";
+import { getInitiatives, getCompanies, getVisibleCompanyIds, getAsignables } from "@/lib/data";
 import { getCurrentUser } from "@/lib/auth";
 import { INITIATIVE_STATUS_LABEL } from "@/lib/priority";
 import { Setup } from "@/components/Setup";
@@ -45,10 +45,12 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
   // aunque por algun motivo can_edit_schedule quedara en true en su fila.
   const puedeMarcar = esAdmin || (me.role === "agent" && me.can_edit_schedule);
 
-  let initiatives: any[], companies: any[], visibles: number[] | null;
+  let initiatives: any[], companies: any[], visibles: number[] | null, asignables: any[];
   try {
-    [initiatives, companies, visibles] = await Promise.all([
+    [initiatives, companies, visibles, asignables] = await Promise.all([
       getInitiatives(), getCompanies(), getVisibleCompanyIds(me),
+      // Solo el admin asigna, asi que para los demas ni se consulta.
+      esAdmin ? getAsignables() : Promise.resolve([]),
     ]);
   } catch (e) {
     return <Setup />;
@@ -145,6 +147,12 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                 const etapasGrid = (
                   <div className={compacta ? "grid" : "grid g2"}>
                     {g.items.map((i: any) => {
+                  // Solo se ofrece a quien puede ver esta empresa: asignarle
+                  // trabajo a alguien que no puede abrir el cronograma no
+                  // serviria de nada (el servidor lo revalida igual).
+                  const asignablesAqui = asignables
+                    .filter((u: any) => u.role === "admin" || u.company_ids.includes(i.company_id))
+                    .map((u: any) => ({ id: u.id, name: u.name }));
                   // El rango sale de las fases (calcStart/calcEnd), no de las
                   // columnas guardadas: esas se quedan viejas al mover una fase.
                   const rango = fmtRango(i.calcStart, i.calcEnd);
@@ -222,6 +230,7 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                               canEdit={esAdmin}
                               canCheck={puedeMarcar}
                               responsables={responsables}
+                              asignables={asignablesAqui}
                             />
                           ))}
 
@@ -239,6 +248,7 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
                                 readOnly={!puedeMarcar}
                                 responsables={responsables}
                                 canEditOwner={esAdmin}
+                                asignables={asignablesAqui}
                               />
                             </div>
                           )}
