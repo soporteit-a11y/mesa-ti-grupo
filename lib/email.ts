@@ -17,6 +17,15 @@ import { headers } from "next/headers";
  * de Resend — para que le llegue a cualquier colaborador hace falta verificar
  * un dominio real y poner EMAIL_FROM con una direccion de ese dominio.
  */
+/**
+ * Si el envio de correo esta conectado. La interfaz lo consulta para no
+ * ofrecer botones que no harian nada: un boton que no avisa de que no hizo
+ * nada es peor que no tenerlo (paso exactamente eso con "Enviar enlace").
+ */
+export function emailConfigurado(): boolean {
+  return Boolean(process.env.RESEND_API_KEY);
+}
+
 export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
   if (!key) {

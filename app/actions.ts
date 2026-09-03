@@ -5,9 +5,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { randomBytes } from "crypto";
 import { verifyPassword, hashPassword } from "@/lib/password";
-import { createSessionCookie, clearSessionCookie, getCurrentUser, requireAdmin, roleHome } from "@/lib/auth";
+import { createSessionCookie, clearSessionCookie, getCurrentUser, getSessionToken, requireAdmin, roleHome } from "@/lib/auth";
 import { getRegistroAbierto } from "@/lib/data";
-import { sendEmail, baseUrl, emailRestablecer, emailBienvenida, emailCuentaAprobada } from "@/lib/email";
+import { sendEmail, baseUrl, emailConfigurado, emailRestablecer, emailBienvenida, emailCuentaAprobada } from "@/lib/email";
 
 export async function login(formData: FormData) {
   await ensureSchema();
@@ -148,6 +148,10 @@ export async function createUser(formData: FormData) {
   const canTicket = role === "agent" && formData.get("can_create_tickets") != null;
   if (!name || !email) return;
 
+  // Sin correo configurado y sin clave, la cuenta nacería sin ninguna forma de
+  // entrar: ni la sabe el admin ni le llega el enlace. Mejor no crearla.
+  if (!password && !emailConfigurado()) redirect("/config?err=sinclave");
+
   // La clave es opcional: si el admin la deja en blanco, se genera una al azar
   // que nadie va a escribir nunca (nadie la conoce) y se le manda al usuario un
   // enlace para que elija la suya — asi el admin no tiene que inventarle una
@@ -195,6 +199,38 @@ export async function setUserApproved(formData: FormData) {
   revalidatePath("/config");
 }
 
+/**
+ * El admin le asigna una contraseña directamente, sin pasar por el correo.
+ * Es el camino que siempre funciona: no depende de que Resend este
+ * configurado, a diferencia de sendResetLink.
+ */
+export async function setUserPassword(formData: FormData) {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+  const id = Number(formData.get("id"));
+  const password = String(formData.get("password") || "");
+  if (!id) return;
+  if (password.length < 8) redirect("/config?err=clave");
+
+  await sql!`UPDATE users SET password_hash = ${hashPassword(password)} WHERE id = ${id}`;
+
+  // Se cierran las sesiones abiertas de esa cuenta — pero si el admin se esta
+  // cambiando la suya, se conserva la actual: expulsarlo de la pantalla donde
+  // acaba de cambiarla parece que algo fallo.
+  const me = await getCurrentUser();
+  const miToken = getSessionToken();
+  if (me?.id === id && miToken) {
+    await sql!`DELETE FROM sessions WHERE user_id = ${id} AND token <> ${miToken}`;
+  } else {
+    await sql!`DELETE FROM sessions WHERE user_id = ${id}`;
+  }
+  // Un enlace de restablecimiento pendiente ya no deberia servir.
+  await sql!`DELETE FROM password_resets WHERE user_id = ${id}`;
+
+  revalidatePath("/config");
+  redirect("/config?ok=clave");
+}
+
 /** El admin dispara el mismo correo de restablecimiento sin conocer ni tocar la clave actual. */
 export async function sendResetLink(formData: FormData) {
   await ensureSchema();
@@ -207,8 +243,13 @@ export async function sendResetLink(formData: FormData) {
 
   const link = await crearEnlaceRestablecer(id);
   const { subject, html } = emailRestablecer(user.name, link);
-  await sendEmail(user.email, subject, html);
+  const enviado = await sendEmail(user.email, subject, html);
+
   revalidatePath("/config");
+  // Se le dice al admin si salio o no: antes esto no daba ninguna señal y
+  // parecia que el boton estaba roto cuando en realidad faltaba configurar
+  // el correo.
+  redirect(enviado ? "/config?ok=enlace" : "/config?err=correo");
 }
 
 /** Abre o cierra el auto-registro publico desde /config. */
@@ -229,7 +270,6 @@ export async function updateUser(formData: FormData) {
   const id = Number(formData.get("id"));
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
-  const password = String(formData.get("password") || "");
   const role = parseRole(formData);
   const canEdit = role === "agent" && formData.get("can_edit_schedule") != null;
   const canTicket = role === "agent" && formData.get("can_create_tickets") != null;
@@ -243,13 +283,11 @@ export async function updateUser(formData: FormData) {
     if (admins[0].n === 0) finalRole = "admin";
   }
 
+  // La contraseña NO se toca aqui: tiene su propia accion (setUserPassword),
+  // con su propio boton. Tenerla mezclada en este formulario hacia que no se
+  // viera y que guardar cualquier otro campo pudiera cambiarla sin querer.
   await sql!`UPDATE users SET name = ${name}, email = ${email}, role = ${finalRole},
     can_edit_schedule = ${canEdit}, can_create_tickets = ${canTicket} WHERE id = ${id}`;
-  if (password) {
-    await sql!`UPDATE users SET password_hash = ${hashPassword(password)} WHERE id = ${id}`;
-    // Al cambiar la clave se cierran las sesiones abiertas de ese usuario.
-    await sql!`DELETE FROM sessions WHERE user_id = ${id}`;
-  }
   await saveUserCompanies(id, formData);
   revalidatePath("/config");
   revalidatePath("/cronogramas");

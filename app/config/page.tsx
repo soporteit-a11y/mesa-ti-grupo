@@ -10,11 +10,13 @@ import {
   createCollaborator, updateCollaborator, deleteCollaborator,
   createCanned, deleteCanned,
   createUser, updateUser, deleteUser, setUserApproved, setRegistroAbierto, sendResetLink,
+  setUserPassword,
 } from "@/app/actions";
+import { emailConfigurado } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
-export default async function ConfigPage() {
+export default async function ConfigPage({ searchParams }: { searchParams: Record<string, string> }) {
   if (!hasDb) return <Setup />;
 
   // Defensa en profundidad: el middleware ya bloquea esta ruta para agentes,
@@ -34,6 +36,20 @@ export default async function ConfigPage() {
   }
 
   const pendientes = users.filter((u) => !u.approved).length;
+  const hayCorreo = emailConfigurado();
+
+  // Avisos de las acciones de usuario. Estas si dan señal (a diferencia del
+  // resto de /config, que guarda en silencio): asignar una clave o mandar un
+  // correo son cosas donde no saber si funcionó es un problema real.
+  const ok = searchParams?.ok;
+  const err = searchParams?.err;
+  const aviso =
+    ok === "clave" ? { cls: "ok", txt: "Contraseña asignada. Las demás sesiones de esa cuenta se cerraron." }
+    : ok === "enlace" ? { cls: "ok", txt: "Enlace de restablecimiento enviado por correo." }
+    : err === "clave" ? { cls: "err", txt: "La contraseña debe tener al menos 8 caracteres. No se cambió nada." }
+    : err === "correo" ? { cls: "err", txt: "No se pudo enviar el correo. Falta configurar RESEND_API_KEY en Vercel (ver HANDOFF.md §14, tanda 10). Mientras tanto, asígnale la contraseña a mano aquí abajo." }
+    : err === "sinclave" ? { cls: "err", txt: "No se creó la cuenta: sin correo configurado hay que ponerle una contraseña, o nacería sin ninguna forma de entrar." }
+    : null;
 
   return (
     <>
@@ -114,6 +130,19 @@ export default async function ConfigPage() {
             {pendientes > 0 ? <span className="cfg-count pend">{pendientes} pendiente(s)</span> : null}
           </div>
 
+          {aviso ? (
+            <p className={aviso.cls === "ok" ? "auth-ok" : "auth-error"}>{aviso.txt}</p>
+          ) : null}
+
+          {!hayCorreo ? (
+            <p className="auth-warn">
+              <b>El envío de correo no está configurado.</b> Por eso no aparece el botón de enviar
+              enlace de restablecimiento: sin <code>RESEND_API_KEY</code> en Vercel no saldría nada y
+              parecería que falla. Mientras tanto, asigna las contraseñas a mano con el campo
+              <b> Asignar clave</b> de cada usuario.
+            </p>
+          ) : null}
+
           <form action={setRegistroAbierto} className="cfg-toggle-row">
             <div>
               <b>Auto-registro público</b>
@@ -142,8 +171,7 @@ export default async function ConfigPage() {
                       <option value="agent">Colaborador</option>
                       <option value="viewer">Visualizador</option>
                     </select>
-                    <input type="password" name="password" placeholder="Nueva clave (opcional)" className="cfg-contact-input" autoComplete="new-password" />
-                    <button type="submit" className="btn sm" title="Guardar">✓</button>
+                    <button type="submit" className="btn sm" title="Guardar nombre, correo y rol">✓</button>
                   </div>
                   {u.role !== "admin" && (
                     <div className="cfg-user-companies">
@@ -185,6 +213,26 @@ export default async function ConfigPage() {
                     </div>
                   )}
                 </form>
+
+                {/* Va fuera del formulario de arriba: en HTML no se pueden
+                    anidar forms, y ademas asi guardar nombre/rol nunca toca la
+                    clave sin querer. */}
+                <form action={setUserPassword} className="cfg-clave-form">
+                  <input type="hidden" name="id" value={u.id} />
+                  <span className="cfg-user-clabel">Asignar clave</span>
+                  <input
+                    type="password"
+                    name="password"
+                    placeholder="Mínimo 8 caracteres"
+                    minLength={8}
+                    className="cfg-contact-input"
+                    autoComplete="new-password"
+                  />
+                  <button type="submit" className="btn sm" title="Asignarle esta contraseña ahora">
+                    Asignar
+                  </button>
+                </form>
+
                 <div className="cfg-user-actions">
                   <form action={setUserApproved}>
                     <input type="hidden" name="id" value={u.id} />
@@ -197,16 +245,18 @@ export default async function ConfigPage() {
                       {u.approved ? "Activa" : "Aprobar"}
                     </button>
                   </form>
-                  <form action={sendResetLink}>
-                    <input type="hidden" name="id" value={u.id} />
-                    <button
-                      type="submit"
-                      className="btn sm"
-                      title="Enviarle un correo para que elija una contraseña nueva, sin tocar la actual"
-                    >
-                      Enviar enlace
-                    </button>
-                  </form>
+                  {hayCorreo && (
+                    <form action={sendResetLink}>
+                      <input type="hidden" name="id" value={u.id} />
+                      <button
+                        type="submit"
+                        className="btn sm"
+                        title="Enviarle un correo para que elija una contraseña nueva, sin tocar la actual"
+                      >
+                        Enviar enlace
+                      </button>
+                    </form>
+                  )}
                   <form action={deleteUser}>
                     <input type="hidden" name="id" value={u.id} />
                     <button type="submit" className="btn sm danger" title="Eliminar cuenta">✕</button>
@@ -226,9 +276,14 @@ export default async function ConfigPage() {
             <input
               type="password"
               name="password"
-              placeholder="Contraseña (opcional)"
+              placeholder={hayCorreo ? "Contraseña (opcional)" : "Contraseña"}
               autoComplete="new-password"
-              title="Déjala vacía para enviarle un enlace y que él mismo elija su contraseña"
+              required={!hayCorreo}
+              title={
+                hayCorreo
+                  ? "Déjala vacía para enviarle un enlace y que él mismo elija su contraseña"
+                  : "Obligatoria mientras el envío de correo no esté configurado: si la dejas vacía, la cuenta quedaría sin forma de entrar"
+              }
             />
             <div className="cfg-user-companies">
               <span className="cfg-user-clabel">Empresas visibles</span>
@@ -256,11 +311,13 @@ export default async function ConfigPage() {
             Un <b>colaborador</b> ve los cronogramas de las empresas que le marques y sus propios tickets;
             con los permisos decides si además puede <b>marcar tareas</b> y <b>reportar tickets</b>. Un
             <b> visualizador</b> solo puede ver los cronogramas de sus empresas — nunca marca tareas ni
-            reporta tickets, así que esos dos permisos no le aplican aunque queden marcados. Deja la
-            clave vacía al crear o al editar para no asignarle una tú — en vez de eso se le manda un
-            correo para que elija la suya (o usa <b>Enviar enlace</b> en cualquier momento, sin tocar
-            la clave actual). No puedes eliminar ni desactivar tu propia cuenta, ni dejar el sistema
-            sin ningún super admin.
+            reporta tickets, así que esos dos permisos no le aplican aunque queden marcados.
+            <br /><br />
+            La contraseña tiene su propio campo <b>Asignar clave</b> en cada fila: la escribes y
+            queda puesta al instante (se cierran las otras sesiones de esa cuenta, pero no la tuya si
+            te la cambias a ti mismo). El ✓ de arriba guarda solo nombre, correo y rol — nunca la
+            clave. No puedes eliminar ni desactivar tu propia cuenta, ni dejar el sistema sin ningún
+            super admin.
           </p>
         </div>
 

@@ -1177,6 +1177,37 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
+### 3 de septiembre de 2026 (tanda 11) — Asignar contraseña a mano, y avisos de verdad en /config
+
+El usuario reportó *"no funciona lo de enviar enlace"*. **No estaba roto:** los logs de Vercel
+mostraban `[correo] RESEND_API_KEY no configurada — no se envio "Restablecer tu contraseña"`, o
+sea que la acción corría bien y el correo no salía por falta de configuración (tanda 10). El
+problema real era de diseño: **el botón no daba ninguna señal**, ni de éxito ni de fallo, así que
+desde fuera era indistinguible de estar roto. Lección: una acción que puede fallar por
+configuración no puede ser silenciosa.
+
+- **`setUserPassword` (acción nueva):** el admin asigna una contraseña directamente. Es el camino
+  que **siempre** funciona, no depende de Resend. Tiene su propio formulario por fila
+  (`.cfg-clave-form`), fuera del de edición — en HTML no se pueden anidar `<form>`, y además así
+  guardar nombre/rol con el ✓ nunca toca la clave sin querer.
+- **Se quitó la contraseña de `updateUser`** y del formulario de edición: tener dos caminos para lo
+  mismo era justo lo que hacía que el campo pasara desapercibido (iba apretado entre el correo y
+  el botón de guardar).
+- **Cambiar la propia clave ya no te expulsa.** `setUserPassword` cierra las demás sesiones de esa
+  cuenta pero conserva la actual si el admin se la está cambiando a sí mismo — antes te sacaba de
+  la pantalla donde acababas de cambiarla, que parece un fallo. Para eso se agregó
+  `getSessionToken()` en `lib/auth.ts`.
+- **Avisos visibles en `/config`** (`?ok=` / `?err=` por `searchParams`, mismo patrón que `/login`):
+  clave asignada, enlace enviado, clave muy corta, correo no configurado. Es una excepción
+  deliberada al "guardar en silencio" del resto de `/config` — en estas acciones no saber si
+  funcionó es un problema real, no un detalle.
+- **`emailConfigurado()`** en `lib/email.ts`: si no hay `RESEND_API_KEY`, el botón "Enviar enlace"
+  **no se muestra** (en vez de mostrarse y no hacer nada) y aparece un aviso explicando por qué y
+  qué usar mientras tanto.
+- **Guarda al crear cuentas:** sin correo configurado, `createUser` ya no acepta contraseña vacía —
+  la cuenta nacería sin ninguna forma de entrar (ni la sabe el admin, ni le llega el enlace). El
+  campo pasa a ser obligatorio en el formulario y la acción lo rechaza server-side.
+
 ### 2 de septiembre de 2026 (tanda 10) — Recuperación de clave, restablecimiento por el admin, y correo real
 
 Tres pedidos juntos porque son la misma pieza: (1) opción de recuperar contraseña en `/login`,

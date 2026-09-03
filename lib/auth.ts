@@ -29,6 +29,15 @@ export async function createSessionCookie(userId: number): Promise<void> {
   });
 }
 
+/**
+ * Token de la sesion actual. Sirve para cerrar las demas sesiones de un
+ * usuario sin cerrar la propia: si el admin se cambia su clave, no tiene
+ * sentido expulsarlo de la pantalla donde acaba de hacerlo.
+ */
+export function getSessionToken(): string | undefined {
+  return cookies().get(SESSION_COOKIE)?.value;
+}
+
 export async function clearSessionCookie(): Promise<void> {
   const token = cookies().get(SESSION_COOKIE)?.value;
   if (token) {

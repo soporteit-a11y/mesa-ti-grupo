@@ -382,6 +382,13 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .cfg-chk input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; margin: 0; }
 .cfg-row-user.pendiente { border-color: var(--high); background: var(--high-w); }
 .cfg-user-actions { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+/* Asignar clave: fuera del form de edicion (no se pueden anidar forms) */
+.cfg-clave-form {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 0;
+  padding: 7px 9px; border: 1px dashed var(--line-strong); border-radius: 7px;
+  background: var(--surface); flex: 1 1 100%;
+}
+.cfg-clave-form .cfg-contact-input { min-width: 150px; }
 .cfg-count.pend { color: var(--high); background: var(--high-w); }
 .cfg-toggle-row {
   display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
