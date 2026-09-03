@@ -370,25 +370,60 @@ td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
 .cfg-sla-form { display: flex; align-items: center; gap: 3px; margin: 0; flex-shrink: 0; }
 .cfg-sla-input { width: 52px; font-size: 12.5px; padding: 5px 6px; text-align: right; font-variant-numeric: tabular-nums; }
 .cfg-sla-suffix { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
-/* Usuarios del sistema: cada fila son dos lineas (datos + empresas visibles) */
-.cfg-row-user { align-items: flex-start; }
-.cfg-edit-user { flex-direction: column; align-items: stretch; gap: 8px; }
-.cfg-user-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 8px; }
-.cfg-user-line .cfg-name-input { flex: 1.2; min-width: 150px; }
+/* Usadas por el formulario de alta de usuario (.cfg-add-user) */
 .cfg-role-select { width: auto; min-width: 132px; font-size: 13px; padding: 5px 8px; flex-shrink: 0; }
 .cfg-user-companies { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; row-gap: 6px; }
 .cfg-user-clabel { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .cfg-chk { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-soft); cursor: pointer; }
 .cfg-chk input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; margin: 0; }
-.cfg-row-user.pendiente { border-color: var(--high); background: var(--high-w); }
-.cfg-user-actions { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
-/* Asignar clave: fuera del form de edicion (no se pueden anidar forms) */
-.cfg-clave-form {
-  display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 0;
-  padding: 7px 9px; border: 1px dashed var(--line-strong); border-radius: 7px;
-  background: var(--surface); flex: 1 1 100%;
+/* ---------- Tarjeta de usuario (/config) ----------
+   Plegada es una sola linea: quien es, rol, estado y empresas. Todo lo
+   editable vive dentro, agrupado por filas etiquetadas. Antes era un bloque
+   de inputs sueltos que ocupaba media pantalla por usuario. */
+.usr-list { display: flex; flex-direction: column; gap: 7px; }
+.usr-card {
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2);
+  padding: 8px 11px;
 }
-.cfg-clave-form .cfg-contact-input { min-width: 150px; }
+.usr-card.pendiente { border-color: var(--high); background: var(--high-w); }
+.usr-sum { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.usr-avatar {
+  width: 26px; height: 26px; border-radius: 999px; flex-shrink: 0;
+  background: var(--accent); color: #0A0E15;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.usr-card.pendiente .usr-avatar { background: var(--high); }
+.usr-id { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.usr-nombre { font-size: 13.5px; font-weight: 650; color: var(--ink); line-height: 1.25; }
+.usr-mail { font-size: 11px; color: var(--muted); line-height: 1.25; }
+.usr-tags { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-left: auto; }
+.usr-pend {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  color: var(--high); background: var(--high-w); border: 1px solid var(--high);
+  border-radius: 999px; padding: 2px 8px; white-space: nowrap;
+}
+.usr-emp {
+  font-size: 10.5px; color: var(--muted); max-width: 260px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.usr-body { display: flex; flex-direction: column; gap: 9px; padding-top: 10px; }
+.usr-form { display: flex; flex-direction: column; gap: 9px; margin: 0; }
+.usr-fila { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; }
+.usr-fila-sep { padding-top: 9px; border-top: 1px solid var(--line); }
+.usr-k {
+  width: 88px; flex-shrink: 0;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--muted);
+}
+.usr-fila .cfg-name-input { flex: 1 1 140px; }
+.usr-fila .cfg-contact-input { flex: 1 1 160px; }
+
+@media (max-width: 820px) {
+  .usr-tags { margin-left: 0; width: 100%; }
+  .usr-k { width: 100%; }
+}
 .cfg-count.pend { color: var(--high); background: var(--high-w); }
 .cfg-toggle-row {
   display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;

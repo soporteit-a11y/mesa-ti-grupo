@@ -1177,6 +1177,30 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
+### 3 de septiembre de 2026 (tanda 12) — Rediseño de las tarjetas de usuario en /config
+
+El usuario dijo que los cuadros de usuario se veían desorganizados y ocupaban mucho espacio.
+Tenía razón: cada cuenta era un bloque de inputs sueltos (nombre, correo, rol, checkboxes de
+empresas, checkboxes de permisos, clave, tres botones) siempre desplegado, y con la fila de
+"Asignar clave" de la tanda 11 metida a la fuerza con `flex: 1 1 100%` en una fila que **no tenía
+`flex-wrap`** en escritorio — peleaba por el espacio con lo demás.
+
+- **Cada usuario es ahora una tarjeta plegable** (reusa el mismo `Collapsible` de los
+  cronogramas). Plegada es **una sola línea**: avatar con iniciales, nombre, correo, insignia de
+  rol, "Pendiente" si aplica, y las empresas que ve. Eso es justo lo que hace falta para
+  reconocer una cuenta sin abrirla.
+- **Abierta, el contenido va agrupado en filas etiquetadas** (`Datos`, `Empresas`, `Permisos`,
+  `Contraseña`, `Cuenta`) con la etiqueta en una columna fija de 88px, en vez de inputs sueltos
+  uno tras otro. Las tres acciones de cuenta (Desactivar / Enviar enlace / Eliminar) pasan de ser
+  una columna vertical apretada a una fila con nombres en texto, no símbolos.
+- Los botones dejan de ser `✓`/`✕` sueltos: ahora dicen **"Guardar cambios"**, **"Asignar"**,
+  **"Eliminar"**. En un panel de administración, un `✕` que borra una cuenta sin decirlo es un
+  accidente esperando a pasar.
+- Se limpiaron las clases CSS que quedaron sin uso (`.cfg-row-user`, `.cfg-edit-user`,
+  `.cfg-user-line`, `.cfg-user-actions`, `.cfg-clave-form`). Las que sigue usando el formulario de
+  alta (`.cfg-user-companies`, `.cfg-user-clabel`, `.cfg-role-select`, `.cfg-chk`) se quedaron,
+  con un comentario diciendo quién las usa ahora.
+
 ### 3 de septiembre de 2026 (tanda 11) — Asignar contraseña a mano, y avisos de verdad en /config
 
 El usuario reportó *"no funciona lo de enviar enlace"*. **No estaba roto:** los logs de Vercel

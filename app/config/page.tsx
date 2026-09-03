@@ -13,8 +13,23 @@ import {
   setUserPassword,
 } from "@/app/actions";
 import { emailConfigurado } from "@/lib/email";
+import { Collapsible } from "@/components/Collapsible";
 
 export const dynamic = "force-dynamic";
+
+const ROLES = {
+  admin: { cls: "admin", txt: "Super admin" },
+  agent: { cls: "agent", txt: "Colaborador" },
+  viewer: { cls: "viewer", txt: "Visualizador" },
+} as const;
+
+/** Iniciales para el avatar de la tarjeta de usuario. */
+function iniciales(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return "?";
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+}
 
 export default async function ConfigPage({ searchParams }: { searchParams: Record<string, string> }) {
   if (!hasDb) return <Setup />;
@@ -158,112 +173,153 @@ export default async function ConfigPage({ searchParams }: { searchParams: Recor
             </button>
           </form>
 
-          <div className="cfg-list">
-            {users.map((u) => (
-              <div className={"cfg-row cfg-row-user" + (u.approved ? "" : " pendiente")} key={u.id}>
-                <form action={updateUser} className="cfg-edit cfg-edit-user">
-                  <input type="hidden" name="id" value={u.id} />
-                  <div className="cfg-user-line">
-                    <input type="text" name="name" defaultValue={u.name} placeholder="Nombre" className="cfg-name-input" />
-                    <input type="email" name="email" defaultValue={u.email} placeholder="Correo" className="cfg-contact-input" />
-                    <select name="role" defaultValue={u.role} className="cfg-role-select">
-                      <option value="admin">Super admin</option>
-                      <option value="agent">Colaborador</option>
-                      <option value="viewer">Visualizador</option>
-                    </select>
-                    <button type="submit" className="btn sm" title="Guardar nombre, correo y rol">✓</button>
-                  </div>
-                  {u.role !== "admin" && (
-                    <div className="cfg-user-companies">
-                      <span className="cfg-user-clabel">Empresas visibles</span>
-                      {companies.map((co) => (
-                        <label className="cfg-chk" key={co.id}>
-                          <input
-                            type="checkbox"
-                            name="company_ids"
-                            value={co.id}
-                            defaultChecked={u.company_ids.includes(co.id)}
-                          />
-                          {co.name}
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                  {u.role === "agent" && (
-                    <div className="cfg-user-companies">
-                      <span className="cfg-user-clabel">Permisos</span>
-                      <label className="cfg-chk">
-                        <input type="checkbox" name="can_edit_schedule" defaultChecked={u.can_edit_schedule} />
-                        Puede marcar tareas en cronogramas
-                      </label>
-                      <label className="cfg-chk">
-                        <input type="checkbox" name="can_create_tickets" defaultChecked={u.can_create_tickets} />
-                        Puede reportar tickets
-                      </label>
-                    </div>
-                  )}
-                  {u.role === "viewer" && (
-                    <div className="cfg-user-companies">
-                      <span className="pv-meta">Solo ve los cronogramas de sus empresas — no puede marcar tareas ni reportar tickets.</span>
-                    </div>
-                  )}
-                  {u.role === "admin" && (
-                    <div className="cfg-user-companies">
-                      <span className="pv-meta">Un super admin ve todas las empresas y tiene todos los permisos.</span>
-                    </div>
-                  )}
-                </form>
+          <div className="usr-list">
+            {users.map((u) => {
+              const rol = ROLES[u.role as keyof typeof ROLES] ?? ROLES.agent;
+              const susEmpresas = companies
+                .filter((co) => u.company_ids.includes(co.id))
+                .map((co) => co.name);
 
-                {/* Va fuera del formulario de arriba: en HTML no se pueden
-                    anidar forms, y ademas asi guardar nombre/rol nunca toca la
-                    clave sin querer. */}
-                <form action={setUserPassword} className="cfg-clave-form">
-                  <input type="hidden" name="id" value={u.id} />
-                  <span className="cfg-user-clabel">Asignar clave</span>
-                  <input
-                    type="password"
-                    name="password"
-                    placeholder="Mínimo 8 caracteres"
-                    minLength={8}
-                    className="cfg-contact-input"
-                    autoComplete="new-password"
-                  />
-                  <button type="submit" className="btn sm" title="Asignarle esta contraseña ahora">
-                    Asignar
-                  </button>
-                </form>
-
-                <div className="cfg-user-actions">
-                  <form action={setUserApproved}>
-                    <input type="hidden" name="id" value={u.id} />
-                    <input type="hidden" name="approved" value={u.approved ? "0" : "1"} />
-                    <button
-                      type="submit"
-                      className={"btn sm" + (u.approved ? "" : " primary")}
-                      title={u.approved ? "Revocar el acceso de esta cuenta" : "Aprobar esta cuenta"}
-                    >
-                      {u.approved ? "Activa" : "Aprobar"}
-                    </button>
-                  </form>
-                  {hayCorreo && (
-                    <form action={sendResetLink}>
-                      <input type="hidden" name="id" value={u.id} />
-                      <button
-                        type="submit"
-                        className="btn sm"
-                        title="Enviarle un correo para que elija una contraseña nueva, sin tocar la actual"
-                      >
-                        Enviar enlace
-                      </button>
-                    </form>
-                  )}
-                  <form action={deleteUser}>
-                    <input type="hidden" name="id" value={u.id} />
-                    <button type="submit" className="btn sm danger" title="Eliminar cuenta">✕</button>
-                  </form>
+              // Cerrada, la tarjeta dice lo que se necesita para reconocer la
+              // cuenta de un vistazo: quien es, que rol tiene, si esta activa y
+              // que empresas ve. Lo editable vive dentro.
+              const resumen = (
+                <div className="usr-sum">
+                  <span className="usr-avatar">{iniciales(u.name)}</span>
+                  <span className="usr-id">
+                    <span className="usr-nombre">{u.name}</span>
+                    <span className="usr-mail mono">{u.email}</span>
+                  </span>
+                  <span className="usr-tags">
+                    <span className={"role-pill " + rol.cls}>{rol.txt}</span>
+                    {!u.approved && <span className="usr-pend">Pendiente</span>}
+                    {u.role !== "admin" && (
+                      <span className="usr-emp mono">
+                        {susEmpresas.length > 0 ? susEmpresas.join(" · ") : "sin empresas"}
+                      </span>
+                    )}
+                  </span>
                 </div>
-              </div>
-            ))}
+              );
+
+              return (
+                <div className={"usr-card" + (u.approved ? "" : " pendiente")} key={u.id}>
+                  <Collapsible storageKey={`usuario.${u.id}`} defaultOpen={false} head={resumen}>
+                    <div className="usr-body">
+                      <form action={updateUser} className="usr-form">
+                        <input type="hidden" name="id" value={u.id} />
+                        <div className="usr-fila">
+                          <span className="usr-k">Datos</span>
+                          <input type="text" name="name" defaultValue={u.name} placeholder="Nombre" className="cfg-name-input" />
+                          <input type="email" name="email" defaultValue={u.email} placeholder="Correo" className="cfg-contact-input" />
+                          <select name="role" defaultValue={u.role} className="cfg-role-select">
+                            <option value="admin">Super admin</option>
+                            <option value="agent">Colaborador</option>
+                            <option value="viewer">Visualizador</option>
+                          </select>
+                        </div>
+
+                        {u.role !== "admin" && (
+                          <div className="usr-fila">
+                            <span className="usr-k">Empresas</span>
+                            {companies.map((co) => (
+                              <label className="cfg-chk" key={co.id}>
+                                <input
+                                  type="checkbox"
+                                  name="company_ids"
+                                  value={co.id}
+                                  defaultChecked={u.company_ids.includes(co.id)}
+                                />
+                                {co.name}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+
+                        {u.role === "agent" && (
+                          <div className="usr-fila">
+                            <span className="usr-k">Permisos</span>
+                            <label className="cfg-chk">
+                              <input type="checkbox" name="can_edit_schedule" defaultChecked={u.can_edit_schedule} />
+                              Marcar tareas
+                            </label>
+                            <label className="cfg-chk">
+                              <input type="checkbox" name="can_create_tickets" defaultChecked={u.can_create_tickets} />
+                              Reportar tickets
+                            </label>
+                          </div>
+                        )}
+
+                        {u.role !== "agent" && (
+                          <div className="usr-fila">
+                            <span className="usr-k" />
+                            <span className="pv-meta">
+                              {u.role === "admin"
+                                ? "Ve todas las empresas y tiene todos los permisos."
+                                : "Solo consulta los cronogramas de sus empresas: no marca tareas ni reporta tickets."}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="usr-fila">
+                          <span className="usr-k" />
+                          <button type="submit" className="btn sm primary">Guardar cambios</button>
+                        </div>
+                      </form>
+
+                      {/* Fuera del form de arriba: en HTML no se pueden anidar
+                          forms, y asi guardar datos nunca toca la clave. */}
+                      <form action={setUserPassword} className="usr-fila usr-fila-sep">
+                        <input type="hidden" name="id" value={u.id} />
+                        <span className="usr-k">Contraseña</span>
+                        <input
+                          type="password"
+                          name="password"
+                          placeholder="Mínimo 8 caracteres"
+                          minLength={8}
+                          className="cfg-contact-input"
+                          autoComplete="new-password"
+                        />
+                        <button type="submit" className="btn sm" title="Asignarle esta contraseña ahora">
+                          Asignar
+                        </button>
+                      </form>
+
+                      <div className="usr-fila usr-fila-sep">
+                        <span className="usr-k">Cuenta</span>
+                        <form action={setUserApproved}>
+                          <input type="hidden" name="id" value={u.id} />
+                          <input type="hidden" name="approved" value={u.approved ? "0" : "1"} />
+                          <button
+                            type="submit"
+                            className={"btn sm" + (u.approved ? "" : " primary")}
+                            title={u.approved ? "Revocar el acceso de esta cuenta" : "Aprobar esta cuenta"}
+                          >
+                            {u.approved ? "Desactivar" : "Aprobar"}
+                          </button>
+                        </form>
+                        {hayCorreo && (
+                          <form action={sendResetLink}>
+                            <input type="hidden" name="id" value={u.id} />
+                            <button
+                              type="submit"
+                              className="btn sm"
+                              title="Enviarle un correo para que elija una contraseña nueva, sin tocar la actual"
+                            >
+                              Enviar enlace
+                            </button>
+                          </form>
+                        )}
+                        <form action={deleteUser}>
+                          <input type="hidden" name="id" value={u.id} />
+                          <button type="submit" className="btn sm danger" title="Eliminar cuenta">Eliminar</button>
+                        </form>
+                      </div>
+                    </div>
+                  </Collapsible>
+                </div>
+              );
+            })}
           </div>
           <form action={createUser} className="cfg-add cfg-add-user">
             <input type="text" name="name" placeholder="Nombre" required />
