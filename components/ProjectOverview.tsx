@@ -167,7 +167,17 @@ export function ProjectOverview({
       <div className="po-comp-row">
         <span className="po-comp-lbl mono">Avance</span>
         <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${pctReal}%`, background: atrasado ? "var(--crit)" : color }} />
+          <div
+            className={
+              // desfase = avance - tiempo, asi que negativo es ir por detras.
+              // Tres tramos, no dos: entre 5 y 15 puntos por detras todavia se
+              // recupera, y pintarlo de rojo igual que un desfase de 40 haria
+              // que el rojo dejara de significar nada.
+              "progress-fill " +
+              (desfase <= -15 ? "avance-mal" : desfase < -5 ? "avance-riesgo" : "avance-ok")
+            }
+            style={{ width: `${pctReal}%` }}
+          />
         </div>
         <span className="progress-label mono">{pctReal}%</span>
       </div>
