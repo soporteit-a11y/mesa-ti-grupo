@@ -72,17 +72,17 @@ export function ProjectOverview({
 
   if (filas.length === 0) return null;
 
-  // Ordenadas por fecha de inicio, no por numero de etapa.
+  // Las filas van en el orden de las etapas (ETAPA 1, 2, 3...), que es el que
+  // llega de getInitiatives.
   //
-  // El numero es el orden en que se crearon, no el orden en que ocurren las
-  // cosas: puestas asi, la vista saltaba hacia atras cuatro veces y no se leia
-  // como una secuencia. El ojo espera que cada barra empiece igual o mas a la
-  // derecha que la anterior; cuando no pasa, deja de entenderse el dibujo.
+  // NO ordenar por fecha de inicio. Se probo el 4-sep-2026 y Eddy lo rechazo:
+  // el escalonado se leia mejor como dibujo, pero rompia la correspondencia
+  // entre el numero de etapa y su fila, que es como el habla del proyecto y
+  // como esta numerado el cronograma del proveedor. Buscar la ETAPA 8 en una
+  // lista ordenada por fecha obliga a leerlas todas.
   //
-  // A igual inicio manda la que termina antes, y a igual rango el numero de
-  // etapa (id), para que el orden sea estable entre recargas — las tres bases
-  // secundarias comparten fechas exactas y si no, bailarian de sitio.
-  filas.sort((a, b) => a.ini - b.ini || a.fin - b.fin || a.id - b.id);
+  // Que las barras salten hacia atras no es un fallo del grafico: es que las
+  // etapas de SINCO corren en paralelo de verdad.
 
   const min = Math.min(...filas.map((f) => f.ini));
   const max = Math.max(...filas.map((f) => f.fin));

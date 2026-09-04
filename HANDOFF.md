@@ -1197,10 +1197,12 @@ al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistem
   títulos se renombraron a mano y el número de etapa no vive en ninguna columna. La migración
   **deja traza en los logs** con las filas que tocó — un patrón que no encaje fallaría en
   silencio, y esa es la única forma de comprobarlo sin acceso a la base.
-- **El Gantt del resumen se ordena por fecha de inicio**, no por número de etapa. El número es el
-  orden en que se crearon, no en que ocurren: la vista saltaba hacia atrás cuatro veces. Empate
-  de inicio → termina antes; empate de rango → id, para que el orden sea estable entre recargas
-  (las tres BD secundarias comparten fechas exactas y si no bailarían de sitio).
+- **El Gantt se ordenó por fecha de inicio y se revirtió el mismo día (4-sep).** El escalonado se
+  leía mejor como dibujo, pero rompía la correspondencia entre el número de etapa y su fila —
+  que es como Eddy habla del proyecto y como está numerado el cronograma del proveedor. Buscar
+  la ETAPA 8 en una lista ordenada por fecha obliga a leerlas todas. **No volver a intentarlo**:
+  que las barras salten hacia atrás no es un fallo del gráfico, es que las etapas de SINCO corren
+  en paralelo de verdad.
 
 ### 3 de septiembre de 2026 (tanda 15) — Retraso por etapa, fechas reales, avisos y pantallas de trabajo
 
