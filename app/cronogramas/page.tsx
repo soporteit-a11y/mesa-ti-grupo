@@ -24,6 +24,7 @@ import { AtrasoEtapa } from "@/components/AtrasoEtapa";
 import { calcularAtraso } from "@/lib/atraso";
 import { AvisoVencimientos } from "@/components/AvisoVencimientos";
 import { getEventos } from "@/lib/recordatorios";
+import { emailConfigurado } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,26 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
   }
 
   const f = searchParams || {};
+
+  // Resultado del envio manual de avisos. Se lee de la URL porque la accion
+  // redirige — es el mismo patron que /config usa para "clave guardada".
+  const avisoEnvio = (() => {
+    const n = Number(f.n || 0);
+    const e = Number(f.e || 0);
+    switch (f.avisos) {
+      case "ok":
+        return { cls: "auth-ok", txt: `Se enviaron ${n} correo(s) con ${e} aviso(s) de etapa.` };
+      case "nada":
+        return { cls: "auth-ok", txt: "No hay avisos pendientes: todo lo de hoy ya se envió." };
+      case "fallo":
+        return { cls: "auth-error", txt: "No salió ningún correo. Revisa los registros de Vercel — quedan pendientes y se reintentan." };
+      case "sincorreo":
+        return { cls: "auth-error", txt: "El envío de correo no está configurado (falta RESEND_API_KEY)." };
+      default:
+        return null;
+    }
+  })();
+
   const vista = f.vista === "gantt" || f.vista === "linea" ? f.vista : "lista";
   const gantt = vista === "gantt";
   const linea = vista === "linea";
@@ -131,7 +152,8 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
       </div>
 
       <div className="content">
-        <AvisoVencimientos eventos={eventos} />
+        {avisoEnvio ? <p className={avisoEnvio.cls}>{avisoEnvio.txt}</p> : null}
+        <AvisoVencimientos eventos={eventos} esAdmin={esAdmin} hayCorreo={emailConfigurado()} />
         <div className="filters">
           <FiltersCompanyClient companies={companies} />
           <div className="vista-toggle">

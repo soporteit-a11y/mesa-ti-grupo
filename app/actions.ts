@@ -8,7 +8,8 @@ import { verifyPassword, hashPassword } from "@/lib/password";
 import { createSessionCookie, clearSessionCookie, getCurrentUser, getSessionToken, requireAdmin, roleHome } from "@/lib/auth";
 import { getRegistroAbierto } from "@/lib/data";
 import { hoyEnRD } from "@/lib/dates";
-import { sendEmail, baseUrl, emailConfigurado, emailRestablecer, emailBienvenida, emailCuentaAprobada } from "@/lib/email";
+import { sendEmail, baseUrl, emailConfigurado, emailRestablecer, emailBienvenida, emailCuentaAprobada, emailEventosEtapa } from "@/lib/email";
+import { getEventos, repartir, sinAvisar, marcarAvisados } from "@/lib/recordatorios";
 
 export async function login(formData: FormData) {
   await ensureSchema();
@@ -887,4 +888,45 @@ export async function reorderTasks(formData: FormData) {
     await sql!`UPDATE initiative_tasks SET position = ${i} WHERE id = ${order[i]} AND initiative_id = ${initiative_id}`;
   }
   revalidatePath("/cronogramas");
+}
+
+/**
+ * Envia ahora los avisos de etapa que estan pendientes, sin esperar al cron.
+ *
+ * Existe por dos motivos. El primero es poder probar el circuito completo el
+ * dia que se configura el correo, en vez de esperar al disparo de la mañana
+ * siguiente. El segundo es que a veces hace falta empujar: se corrige una fecha
+ * a las 4 de la tarde y tiene sentido que el equipo se entere hoy.
+ *
+ * Se autentica con la sesion (admin), NO con CRON_SECRET: ese secreto es para
+ * que Vercel llame a una ruta que no tiene sesion, y no hay ninguna razon para
+ * que una persona lo tenga que escribir en ningun sitio.
+ *
+ * Manda solo lo que aun no se ha avisado, igual que el cron. Pulsarlo dos veces
+ * seguidas no reenvia nada — si lo hiciera, seria la forma mas rapida de que
+ * alguien acabe filtrando estos correos a la papelera.
+ */
+export async function enviarAvisosAhora() {
+  await ensureSchema();
+  if (!(await requireAdmin())) return;
+
+  if (!emailConfigurado()) redirect("/cronogramas?avisos=sincorreo");
+
+  const nuevos = await sinAvisar(await getEventos());
+  if (nuevos.length === 0) redirect("/cronogramas?avisos=nada");
+
+  const buzones = await repartir(nuevos);
+  const link = `${baseUrl()}/cronogramas`;
+  let enviados = 0;
+  for (const d of buzones) {
+    const { subject, html } = emailEventosEtapa(d.nombre, d.eventos, link);
+    if (await sendEmail(d.correo, subject, html)) enviados++;
+  }
+
+  // Solo se dan por avisados si alguien los recibio. Marcarlos con cero envios
+  // los enterraria: no volverian a intentarse nunca.
+  if (enviados > 0) await marcarAvisados(nuevos);
+
+  revalidatePath("/cronogramas");
+  redirect(`/cronogramas?avisos=${enviados > 0 ? "ok" : "fallo"}&n=${enviados}&e=${nuevos.length}`);
 }

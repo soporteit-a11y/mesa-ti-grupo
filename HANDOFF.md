@@ -1177,6 +1177,24 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
+### 4 de septiembre de 2026 (tanda 18) — Botón para enviar los avisos sin esperar al cron
+
+- **`enviarAvisosAhora()`** y un botón en la franja de avisos de `/cronogramas`, solo para el
+  admin y solo si el correo está configurado.
+- **Por qué:** el cron dispara una vez al día a las 12:00 UTC. El día que se configura Resend hay
+  que poder probar el circuito completo sin esperar a la mañana siguiente; y a veces hace falta
+  empujar — se corrige una fecha a las 4 de la tarde y tiene sentido que el equipo se entere hoy.
+- **Se autentica con la sesión (admin), no con `CRON_SECRET`.** Ese secreto existe para que Vercel
+  llame a una ruta que no tiene sesión; no hay ninguna razón para que una persona lo tenga que
+  escribir en ningún sitio.
+- Manda **solo lo que aún no se ha avisado**, igual que el cron. Pulsarlo dos veces no reenvía
+  nada: si lo hiciera, sería la forma más rápida de que alguien filtre estos correos a la papelera.
+- El resultado se informa por `searchParams` (`?avisos=ok|nada|fallo|sincorreo`), el mismo patrón
+  que usa `/config`. Distingue «no había nada que enviar» de «no salió ninguno», que son cosas
+  muy distintas y antes se habrían visto igual.
+- Verificado ese día: `RESEND_API_KEY` y `CRON_SECRET` puestas por Eddy; el correo de
+  restablecimiento llegó, y `/api/recordatorios` pasó de 503 a **401** sin credenciales.
+
 ### 4 de septiembre de 2026 (tanda 17) — Los avisos pasan a ser eventos de etapa
 
 Reenfoque pedido por Eddy a mitad de la tanda anterior: los avisos dejan de ser «todo lo que

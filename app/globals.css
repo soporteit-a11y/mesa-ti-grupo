@@ -1227,3 +1227,5 @@ body { overflow-x: hidden; }
 .av-ok-n { color: var(--low); }
 .av-dias.ev-completada { border-color: var(--low); color: var(--low); }
 .av-dias.ev-inicia { border-color: var(--info); color: var(--info); }
+.av-envio { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; padding: 0 14px 12px; }
+.av-envio-nota { font-size: 10.5px; color: var(--muted); }

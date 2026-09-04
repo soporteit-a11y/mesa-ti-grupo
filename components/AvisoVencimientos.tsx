@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Evento } from "@/lib/recordatorios";
+import { enviarAvisosAhora } from "@/app/actions";
 
 const ETIQUETA: Record<Evento["tipo"], string> = {
   vence: "vence",
@@ -20,7 +21,15 @@ const ETIQUETA: Record<Evento["tipo"], string> = {
  * Arranca plegado a una linea. Un panel abierto con diez filas encima del
  * contenido acaba siendo algo que se cierra sin leer.
  */
-export function AvisoVencimientos({ eventos }: { eventos: Evento[] }) {
+export function AvisoVencimientos({
+  eventos, esAdmin = false, hayCorreo = false,
+}: {
+  eventos: Evento[];
+  /** Solo el admin puede disparar el envio a mano. */
+  esAdmin?: boolean;
+  /** Sin correo configurado el boton no se ofrece: no haria nada. */
+  hayCorreo?: boolean;
+}) {
   const [abierto, setAbierto] = useState(false);
 
   // Las completadas no entran en el titular: son buenas noticias y no compiten
@@ -49,6 +58,15 @@ export function AvisoVencimientos({ eventos }: { eventos: Evento[] }) {
         </span>
         <span className="av-mas mono">{abierto ? "ocultar" : "ver"}</span>
       </button>
+
+      {esAdmin && hayCorreo ? (
+        <form action={enviarAvisosAhora} className="av-envio">
+          <button type="submit" className="btn sm">Enviar avisos por correo ahora</button>
+          <span className="av-envio-nota">
+            Solo lo que aún no se ha avisado. Va a quien tenga esa empresa habilitada.
+          </span>
+        </form>
+      ) : null}
 
       {abierto && (
         <ul className="av-lista">
