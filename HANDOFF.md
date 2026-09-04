@@ -1177,6 +1177,31 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
+### 4 de septiembre de 2026 (tanda 17) — Los avisos pasan a ser eventos de etapa
+
+Reenfoque pedido por Eddy a mitad de la tanda anterior: los avisos dejan de ser «todo lo que
+vence» (fases + tareas) y pasan a ser **tres momentos de la etapa**.
+
+- **`inicia`** — la etapa arranca hoy. Para que el equipo sepa que ya le toca sin depender de que
+  alguien mire.
+- **`vence`** — quedan 7 días o menos y sigue sin terminarse.
+- **`completada`** — se terminó. Lo único que se manda como noticia y no como recordatorio.
+
+- **Por qué a nivel de etapa y no de tarea:** un aviso por cada tarea que vence es un goteo que
+  acaba en la papelera. La etapa es la unidad de la que el equipo habla.
+- **Quién lo recibe:** todo el que tenga esa empresa habilitada — quien está dado de alta en CMG
+  recibe los eventos de CMG — más los administradores. Una etapa no es de una persona, es del
+  equipo que trabaja esa empresa. Un correo por persona con todo lo suyo, no uno por etapa.
+- **Nada se avisa dos veces** (tabla `avisos_enviados`). La clave lleva la fecha dentro
+  (`etapa:12:vence:2027-02-08`), así que **mover una fecha rearma el aviso** — la fecha nueva es
+  información nueva y callársela sería peor que repetirse.
+- La marca de avisado se pone **después** de que el correo salga, y solo si salió alguno. Marcarlo
+  con cero envíos enterraría el aviso: no volvería a intentarse nunca.
+- El asunto del correo dice lo más urgente que hay dentro; un asunto genérico obliga a abrirlo
+  para saber si corre prisa. Dentro van los tres tipos en bloques separados, urgente primero.
+- El **aviso en pantalla** muestra los mismos eventos y funciona sin Resend. Se pone verde cuando
+  solo quedan buenas noticias.
+
 ### 3 de septiembre de 2026 (tanda 16) — Fechas del Excel, Gantt en orden, y punto de retorno
 
 - **`VOLVER-ATRAS.md`**, escrito ANTES de tocar nada porque Eddy lo pidió así. Empieza por el

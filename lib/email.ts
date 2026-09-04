@@ -110,49 +110,79 @@ export function emailCuentaAprobada(nombre: string, link: string): { subject: st
 }
 
 /**
- * Aviso de lo que vence esta semana.
+ * Aviso de eventos de etapa: la que arranca, la que esta por vencer y la que se
+ * completo.
  *
- * Va en una sola tabla y sin adornos: quien lo recibe necesita saber que le
- * toca y cuando, no leer un boletin. Se ordena por lo que vence antes, y lo que
- * vence hoy o manana se marca, porque es lo unico que exige accion inmediata.
+ * Van los tres tipos en un mismo correo, separados por bloques. Mandar tres
+ * correos distintos el mismo dia a la misma persona es como se consigue que
+ * deje de abrirlos; lo que hay que separar es el tono, no el mensaje.
+ *
+ * El orden no es casual: primero lo que exige actuar, al final la buena
+ * noticia. Nadie deberia tener que bajar hasta el fondo para enterarse de que
+ * algo se le vence en dos dias.
  */
-export function emailVencimientos(
+export function emailEventosEtapa(
   nombre: string,
-  items: { tipo: string; titulo: string; etapa: string; empresa: string; vence: string; diasRestantes: number }[],
+  eventos: {
+    tipo: "inicia" | "vence" | "completada";
+    etapa: string; empresa: string; fecha: string;
+    diasRestantes: number | null; progreso: number; hechas: number; total: number;
+  }[],
   link: string,
 ): { subject: string; html: string } {
-  const filas = items
-    .map((i) => {
-      const urgente = i.diasRestantes <= 1;
-      const cuando =
-        i.diasRestantes === 0 ? "hoy" : i.diasRestantes === 1 ? "mañana" : `en ${i.diasRestantes} días`;
-      return `
-        <tr>
-          <td style="padding:7px 10px;border-bottom:1px solid #eee;font-size:13px;">
-            <b>${escapar(i.titulo)}</b>
-            <div style="color:#888;font-size:11px;">${escapar(i.empresa)} · ${escapar(i.etapa)} · ${i.tipo}</div>
-          </td>
-          <td style="padding:7px 10px;border-bottom:1px solid #eee;font-size:12px;white-space:nowrap;${urgente ? "color:#c0392b;font-weight:700;" : "color:#555;"}">
-            ${escapar(i.vence)}<br><span style="font-size:11px;">${cuando}</span>
-          </td>
-        </tr>`;
-    })
-    .join("");
+  const de = (t: string) => eventos.filter((e) => e.tipo === t);
+  const vencen = de("vence");
+  const inician = de("inicia");
+  const listas = de("completada");
+
+  const bloque = (titulo: string, color: string, items: typeof eventos, pie: (e: any) => string) =>
+    items.length === 0
+      ? ""
+      : `<div style="margin:18px 0 0;">
+           <div style="font-size:12px;font-weight:700;color:${color};letter-spacing:.04em;text-transform:uppercase;">${titulo}</div>
+           <table style="width:100%;border-collapse:collapse;margin-top:6px;">
+             ${items
+               .map(
+                 (e) => `<tr>
+                   <td style="padding:7px 0;border-bottom:1px solid #eee;font-size:13px;">
+                     <b>${escapar(e.etapa)}</b>
+                     <div style="color:#888;font-size:11px;">${escapar(e.empresa)} · ${escapar(pie(e))}</div>
+                   </td>
+                 </tr>`,
+               )
+               .join("")}
+           </table>
+         </div>`;
+
+  // El asunto dice lo mas urgente que hay dentro. Un asunto generico obliga a
+  // abrir el correo para saber si corre prisa.
+  const subject = vencen.length
+    ? `${vencen.length === 1 ? "Una etapa vence" : `${vencen.length} etapas vencen`} pronto — Mesa TI`
+    : inician.length
+    ? `${inician.length === 1 ? "Empieza una etapa" : `Empiezan ${inician.length} etapas`} hoy — Mesa TI`
+    : `${listas.length === 1 ? "Etapa completada" : `${listas.length} etapas completadas`} — Mesa TI`;
 
   return {
-    subject: `${items.length} ${items.length === 1 ? "cosa vence" : "cosas vencen"} esta semana — Mesa TI`,
+    subject,
     html: envoltorio(`
       <p>Hola ${escapar(nombre)},</p>
-      <p>Esto vence dentro de los próximos 7 días y todavía no está terminado:</p>
-      <table style="width:100%;border-collapse:collapse;margin:12px 0;">${filas}</table>
-      <p><a href="${link}" style="color:#4a7a2a;">Abrir cronogramas</a></p>
+      ${bloque(
+        "Vence pronto",
+        "#c0392b",
+        vencen,
+        (e) =>
+          `${e.diasRestantes === 0 ? "vence hoy" : e.diasRestantes === 1 ? "vence mañana" : `faltan ${e.diasRestantes} días`} (${e.fecha}) · ${e.hechas}/${e.total} tareas · ${e.progreso}%`,
+      )}
+      ${bloque("Empieza hoy", "#b8860b", inician, (e) => `arranca el ${e.fecha}`)}
+      ${bloque("Completada", "#4a7a2a", listas, (e) => `${e.total} tareas terminadas`)}
+      <p style="margin-top:20px;"><a href="${link}" style="color:#4a7a2a;">Abrir cronogramas</a></p>
     `),
   };
 }
 
 /**
- * Escapa texto que va dentro del HTML del correo. Los titulos de fases y tareas
- * los escribe gente, y un "<" suelto romperia la maqueta del mensaje.
+ * Escapa texto que va dentro del HTML del correo. Los titulos de las etapas los
+ * escribe gente, y un "<" suelto romperia la maqueta del mensaje.
  */
 function escapar(s: string): string {
   return String(s)

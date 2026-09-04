@@ -1,24 +1,23 @@
 import { NextResponse } from "next/server";
-import { sql, ensureSchema } from "@/lib/db";
-import { getPendientes, porDestinatario, DIAS_AVISO } from "@/lib/recordatorios";
-import { sendEmail, baseUrl, emailConfigurado, emailVencimientos } from "@/lib/email";
-import { hoyEnRD } from "@/lib/dates";
+import { ensureSchema } from "@/lib/db";
+import { getEventos, repartir, sinAvisar, marcarAvisados, DIAS_AVISO } from "@/lib/recordatorios";
+import { sendEmail, baseUrl, emailConfigurado, emailEventosEtapa } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Envio diario de avisos de vencimiento.
+ * Avisos por correo de los tres momentos de una etapa: cuando arranca, cuando
+ * le queda una semana para terminar, y cuando se completa.
  *
- * Lo dispara el cron de Vercel (ver vercel.json). Se protege con CRON_SECRET:
- * sin el, cualquiera con la URL podria provocar una tanda de correos.
+ * Lo dispara el cron de Vercel (ver vercel.json). Va a todo el que tenga
+ * habilitada esa empresa — quien esta dado de alta en CMG recibe los eventos de
+ * CMG — mas los administradores. Un correo por persona con todo lo suyo, no uno
+ * por etapa.
  *
- * **Un aviso por persona y por dia, no uno por tarea.** Si a alguien le vencen
- * seis cosas recibe un correo con las seis, no seis correos. La diferencia
- * entre un sistema que se lee y uno que se filtra a la papelera esta justo ahi.
- *
- * La marca de "ya enviado" se guarda en `meta` con la fecha del dia. Un cron
- * puede dispararse dos veces (reintento, redespliegue), y sin esto la segunda
- * vez volveria a escribirle a todo el mundo.
+ * **Nada se avisa dos veces.** Cada evento tiene una clave en la tabla
+ * `avisos_enviados`, y solo se marca DESPUES de que el correo salga: si el
+ * envio falla, el aviso sigue pendiente y se reintenta al dia siguiente en vez
+ * de darse por hecho.
  */
 export async function GET(req: Request) {
   // Falla cerrado: sin CRON_SECRET no se atiende a nadie.
@@ -26,7 +25,7 @@ export async function GET(req: Request) {
   // La tentacion es "si no hay secreto, dejar pasar", y es justo al reves: esta
   // ruta dispara correos a todo el personal y no esta detras del login (el cron
   // no trae cookie). Sin secreto seria un boton de envio masivo publico, y de
-  // paso contaria a cualquiera cuanto trabajo hay vencido.
+  // paso contaria a cualquiera cuanto trabajo hay pendiente.
   const secreto = process.env.CRON_SECRET;
   if (!secreto) {
     return NextResponse.json(
@@ -39,59 +38,49 @@ export async function GET(req: Request) {
   }
 
   await ensureSchema();
-  const hoy = hoyEnRD();
-  const clave = `recordatorio_${hoy}`;
 
-  const url = new URL(req.url);
-  const forzar = url.searchParams.get("forzar") === "1";
+  const todos = await getEventos();
+  const nuevos = await sinAvisar(todos);
 
-  const ya = await sql!`SELECT v FROM meta WHERE k = ${clave}`;
-  if (ya.length > 0 && !forzar) {
-    return NextResponse.json({ ok: true, omitido: "ya se envió hoy", detalle: ya[0].v });
+  if (nuevos.length === 0) {
+    return NextResponse.json({ ok: true, eventos: todos.length, nuevos: 0, enviados: 0 });
   }
 
-  const pendientes = await getPendientes();
-  if (pendientes.length === 0) {
-    await marcar(clave, "nada que avisar");
-    return NextResponse.json({ ok: true, pendientes: 0, enviados: 0 });
-  }
-
-  // Sin correo configurado no se marca el dia como enviado: cuando Eddy ponga
-  // la clave de Resend, el siguiente disparo hara el trabajo en vez de creer
-  // que ya lo hizo.
+  // Sin correo configurado no se marca nada como avisado: cuando exista la
+  // clave de Resend, el siguiente disparo hara el trabajo en vez de creer que
+  // ya lo hizo y callarse para siempre.
   if (!emailConfigurado()) {
     return NextResponse.json({
       ok: false,
-      pendientes: pendientes.length,
+      eventos: todos.length,
+      nuevos: nuevos.length,
       enviados: 0,
       motivo: "RESEND_API_KEY no configurada — el aviso en pantalla sí funciona",
     });
   }
 
-  const grupos = porDestinatario(pendientes);
+  const buzones = await repartir(nuevos);
   const link = `${baseUrl()}/cronogramas`;
   let enviados = 0;
+  let fallidos = 0;
 
-  for (const [userId, items] of grupos) {
-    // Sin dueno asignado va a los administradores: un vencimiento que no es de
-    // nadie es el que mas facil se queda sin mirar.
-    const destinos =
-      userId === null
-        ? ((await sql!`SELECT name, email FROM users WHERE role = 'admin' AND approved = true AND email <> ''`) as any[])
-        : ((await sql!`SELECT name, email FROM users WHERE id = ${userId} AND approved = true AND email <> ''`) as any[]);
-
-    for (const d of destinos) {
-      if (!d.email) continue;
-      const { subject, html } = emailVencimientos(d.name, items, link);
-      if (await sendEmail(d.email, subject, html)) enviados++;
-    }
+  for (const d of buzones) {
+    const { subject, html } = emailEventosEtapa(d.nombre, d.eventos, link);
+    if (await sendEmail(d.correo, subject, html)) enviados++;
+    else fallidos++;
   }
 
-  await marcar(clave, `${enviados} correos, ${pendientes.length} vencimientos`);
-  return NextResponse.json({ ok: true, pendientes: pendientes.length, enviados, dias: DIAS_AVISO });
-}
+  // Solo se dan por avisados si alguien los recibio. Marcarlos con cero envios
+  // los enterraria: no volverian a intentarse nunca.
+  if (enviados > 0) await marcarAvisados(nuevos);
 
-async function marcar(clave: string, detalle: string) {
-  await sql!`INSERT INTO meta (k, v) VALUES (${clave}, ${detalle})
-    ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
+  return NextResponse.json({
+    ok: true,
+    eventos: todos.length,
+    nuevos: nuevos.length,
+    destinatarios: buzones.length,
+    enviados,
+    fallidos,
+    dias: DIAS_AVISO,
+  });
 }

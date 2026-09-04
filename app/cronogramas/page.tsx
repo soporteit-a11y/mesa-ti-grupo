@@ -23,7 +23,7 @@ import { FiltersCompanyClient } from "@/components/FiltersCompanyClient";
 import { AtrasoEtapa } from "@/components/AtrasoEtapa";
 import { calcularAtraso } from "@/lib/atraso";
 import { AvisoVencimientos } from "@/components/AvisoVencimientos";
-import { getPendientes } from "@/lib/recordatorios";
+import { getEventos } from "@/lib/recordatorios";
 
 export const dynamic = "force-dynamic";
 
@@ -66,11 +66,12 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
     return <Setup />;
   }
 
-  // Lo que vence esta semana. Solo de las empresas que esta persona ve, para
-  // que un colaborador no reciba avisos de proyectos que ni puede abrir.
-  let pendientes: Awaited<ReturnType<typeof getPendientes>> = [];
+  // Eventos de etapa: la que arranca hoy, la que esta por vencer y la que se
+  // completo. Solo de las empresas que esta persona ve, para que un colaborador
+  // no reciba avisos de proyectos que ni puede abrir.
+  let eventos: Awaited<ReturnType<typeof getEventos>> = [];
   try {
-    pendientes = await getPendientes(visibles);
+    eventos = await getEventos(visibles);
   } catch (e) {
     // El aviso es un extra: si falla, la pagina sigue sirviendo para lo suyo.
   }
@@ -130,7 +131,7 @@ export default async function CronogramasPage({ searchParams }: { searchParams: 
       </div>
 
       <div className="content">
-        <AvisoVencimientos items={pendientes} mio={!esAdmin} />
+        <AvisoVencimientos eventos={eventos} />
         <div className="filters">
           <FiltersCompanyClient companies={companies} />
           <div className="vista-toggle">

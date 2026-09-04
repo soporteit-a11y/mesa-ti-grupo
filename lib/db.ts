@@ -111,6 +111,18 @@ async function init(q: NonNullable<typeof sql>) {
     PRIMARY KEY (user_id, company_id)
   )`;
 
+  // Avisos ya enviados, para no repetir ninguno.
+  //
+  // La clave la construye lib/recordatorios.ts y lleva la fecha dentro
+  // ("etapa:12:vence:2027-02-08"), de modo que si una fecha se mueve el aviso
+  // se rearma solo. Sin esta tabla, el cron diario mandaria el mismo aviso los
+  // siete dias previos al vencimiento — la forma mas rapida de que alguien cree
+  // una regla para tirarlos todos a la papelera.
+  await q`CREATE TABLE IF NOT EXISTS avisos_enviados (
+    clave TEXT PRIMARY KEY,
+    enviado_at TIMESTAMPTZ DEFAULT now()
+  )`;
+
   // Migracion para BD existente (tickets antiguos con columnas NOT NULL)
   // Fecha en que la tarea se hizo DE VERDAD, frente a end_date, que es la fecha
   // en que se coordino. Tener las dos es lo que permite medir el atraso real:

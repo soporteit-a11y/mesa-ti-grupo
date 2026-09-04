@@ -1220,3 +1220,10 @@ body { overflow-x: hidden; }
   .av-lista li { gap: 7px; }
   .ae-panel { width: min(290px, calc(100vw - 40px)); }
 }
+
+/* Aviso de eventos de etapa: verde cuando solo hay buenas noticias. */
+.av.ok { border-color: var(--low); background: var(--low-w); }
+.av.ok .av-punto { background: var(--low); }
+.av-ok-n { color: var(--low); }
+.av-dias.ev-completada { border-color: var(--low); color: var(--low); }
+.av-dias.ev-inicia { border-color: var(--info); color: var(--info); }
