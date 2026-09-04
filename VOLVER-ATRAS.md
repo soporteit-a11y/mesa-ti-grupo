@@ -36,6 +36,27 @@ muestra el mensaje real en vez de quedarse en negro.
 
 ---
 
+## 0. Lo que ya NO vuelve con un rollback
+
+Después de fijar este punto de retorno corrió la migración **`fechas_excel`**, que escribió en la
+base las fechas de tres etapas (BD Principal, ADPRO, Seguimiento y cierre). Verificado en los
+logs: 3 de 3.
+
+Volver el código atrás **no borra esas fechas**. Si además hiciera falta deshacerlas, se hace a
+mano con el lápiz de cada etapa (vaciar los dos campos devuelve la etapa al cálculo automático),
+o con SQL:
+
+```sql
+UPDATE initiatives SET start_date = NULL, due_date = NULL
+WHERE area = 'SINCO ERP'
+  AND (title ILIKE '%BD Principal%' OR title ILIKE '%ADPRO%' OR title ILIKE '%Seguimiento%');
+DELETE FROM meta WHERE k = 'fechas_excel';
+```
+
+Borrar la clave de `meta` es lo que permite que la migración se vuelva a aplicar si se quiere.
+
+---
+
 ## 1. Lo más rápido — Rollback instantáneo de Vercel
 
 **Esto es lo que hay que hacer primero.** No toca el repositorio, no requiere consola, y se
