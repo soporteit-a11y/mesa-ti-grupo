@@ -160,6 +160,12 @@ sistema → escribir la clave nueva en la fila de tu cuenta → ✓ (o, ahora qu
 ningún formulario que yo vea). Al cambiarla se cierran automáticamente todas las sesiones abiertas
 de ese usuario.
 
+**P0.quinquies · Poner `CRON_SECRET` en Vercel.**
+Cualquier texto largo y aleatorio. Sin ella, `/api/recordatorios` responde **503 a propósito**:
+esa ruta no está detrás del login (el cron de Vercel no manda cookie de sesión), así que sin
+secreto sería un botón público de envío masivo de correo, y de paso le contaría a cualquiera
+cuánto trabajo hay vencido. Falla cerrado por decisión, no por descuido.
+
 **P0.quater · Configurar Resend para que el correo salga de verdad.**
 Sin esto, `/recuperar`, el botón "Enviar enlace" de `/config`, la bienvenida a una cuenta sin
 clave y el aviso de "cuenta aprobada" no le llegan a nadie — el código corre igual, pero
@@ -213,13 +219,17 @@ Si no aparecen, mira los logs de Vercel buscando `[avisos SLA]`.
 
 ### 🟡 Funciones no implementadas
 
-**P2 · Alertas nivel 2 — resumen diario por correo. Más fácil desde 2026-09-02.**
-Vercel Cron (`vercel.json`) llamando a un endpoint `/api/cron/alertas`. Sería el primer `/api/`
-del proyecto, pero el envío en sí ya no hay que montarlo: reusa `sendEmail()` de `lib/email.ts`
-(tanda 10, §14), que ya habla con Resend. Solo falta P0.quater (la cuenta de Resend configurada)
-y el propio cron.
-*Limitación real: el plan Hobby de Vercel solo permite cron **diario**. Para avisos por hora hace
-falta Pro (20 USD/mes).* Estimación: ~1-2 h (bajó porque el envío de correo ya existe).
+**P2 · Alertas nivel 2 — resumen diario por correo. ✅ HECHO (2026-09-03, tanda 15).**
+`vercel.json` con cron diario a las 12:00 UTC → `/api/recordatorios`, que avisa de lo que vence
+en los próximos 7 días (`lib/recordatorios.ts`). Un correo por persona y por día, no uno por
+tarea. Lo ya vencido no entra: para eso está el cuadrito de retraso de cada etapa, permanente.
+Lo que no tiene a nadie asignado va a los administradores.
+**Falta para que funcione de verdad, y es cosa del usuario:** `RESEND_API_KEY` (P0.quater) y
+`CRON_SECRET` — sin esta segunda la ruta responde 503 a propósito, porque no está detrás del
+login (el cron no trae cookie) y sin secreto sería un botón de envío masivo público.
+El **aviso en pantalla** (`components/AvisoVencimientos.tsx`) ya funciona sin ninguna de las dos.
+*Limitación real: el plan Hobby de Vercel solo permite cron diario. Para avisos por hora hace
+falta Pro (20 USD/mes).*
 
 **P3 · Alertas para rutas de trabajo. ✅ Resuelto en parte (2026-08-25).**
 `initiatives.due_date` ya existe, editable desde la tarjeta y el diálogo de alta. Cada ruta muestra
@@ -233,11 +243,12 @@ Documentado para descartarlo con criterio, no para hacerlo.
 
 ### 🟡 Seguridad
 
-**P5 · El sitio no tiene autenticación.**
-Cualquiera con la URL lee y modifica todo: tickets, configuración, rutas. Hoy es tolerable porque
-lo usa una sola persona y la URL no está publicada. **Si algún día entra más gente del grupo, hay
-que resolverlo antes.** Vercel Password Protection es de pago; alternativas gratuitas: Auth.js o
-un middleware con Basic Auth.
+**P5 · El sitio no tiene autenticación. ✅ RESUELTO (2026-09-01/02).**
+Hay login con sesión en cookie `httpOnly`, tres roles (`admin` / `agent` / `viewer`),
+visibilidad por empresa en `user_companies`, y middleware que corta por ruta. La autorización se
+comprueba en el servidor dentro de cada Server Action, no solo escondiendo botones.
+**Lo que sigue vivo de este punto:** P0.ter — la contraseña inicial se compartió por chat el
+2-sep y debe considerarse comprometida hasta que se cambie.
 
 ### 🔵 Deuda técnica (nada urgente, todo conocido)
 
