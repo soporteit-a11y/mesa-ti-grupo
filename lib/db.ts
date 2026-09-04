@@ -244,6 +244,46 @@ async function init(q: NonNullable<typeof sql>) {
     await q`INSERT INTO meta (k, v) VALUES ('rango_manual', 'v1') ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
   }
 
+  // Fechas de tres etapas de SINCO, corregidas contra el Excel del proveedor
+  // ("MESSINA - IMPLEMENTACION SINCO ERP", hoja 20260827 Preliminar).
+  //
+  // Por que hacian falta: al importar, el fin de cada etapa se calculo tomando
+  // la ultima fecha de sus tareas. Pero el Excel exporto sin fecha una parte de
+  // las tareas ("Por Definir"): 20 en A&F BD Principal y 14 en ADPRO. Al no
+  // tener fecha no contaron, y el calculo se paro en la ultima que si la tenia.
+  // La fila de resumen del Excel si las incluye, porque MS Project las tiene
+  // fechadas por dentro aunque el export las dejara vacias.
+  //
+  // La 9 va hasta el 11 de febrero porque Seguimiento y Cierre son una sola
+  // etapa aqui, y esa es la fecha del cierre.
+  //
+  // Se identifican por un trozo distintivo del titulo y no por el numero: los
+  // titulos se renombraron ("ETAPA 3 - SINCO · ...") pero conservan la parte
+  // descriptiva, y el numero de etapa no vive en ninguna columna.
+  const fechasExcel = await q`SELECT v FROM meta WHERE k = 'fechas_excel'`;
+  if (fechasExcel[0]?.v !== "v1") {
+    const correcciones: [string, string, string][] = [
+      ["%BD Principal%", "2026-08-20", "2027-02-08"],
+      ["%ADPRO%", "2026-08-21", "2026-12-31"],
+      ["%Seguimiento%", "2026-05-26", "2027-02-11"],
+    ];
+    let tocadas = 0;
+    for (const [patron, ini, fin] of correcciones) {
+      const r = await q`
+        UPDATE initiatives SET start_date = ${ini}, due_date = ${fin}
+        WHERE area = 'SINCO ERP' AND title ILIKE ${patron}
+        RETURNING id, title`;
+      tocadas += r.length;
+      // Queda en los logs de Vercel: es la unica forma de comprobar que los
+      // patrones encontraron algo, porque los titulos se editan a mano y una
+      // correccion que no encaja con ninguno fallaria en silencio.
+      console.log(`[fechas-excel] ${patron} -> ${r.length} fila(s)`,
+        r.map((x: any) => x.title).join(" | "));
+    }
+    await q`INSERT INTO meta (k, v) VALUES ('fechas_excel', 'v1') ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v`;
+    console.log(`[fechas-excel] total corregidas: ${tocadas} de 3`);
+  }
+
   // Reemplaza los tickets de ejemplo por los tickets reales del CSV (una sola vez).
   const ver = await q`SELECT v FROM meta WHERE k = 'tickets_seed'`;
   if (ver.length === 0 || ver[0].v !== "csv-v1") {

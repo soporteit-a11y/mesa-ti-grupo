@@ -1177,6 +1177,31 @@ siga siendo coherente:
 Cada entrada corresponde a una tanda de cambios pedida por el usuario. Mantener este registro
 al día es parte del trabajo: es lo que permite reconstruir *por qué* el sistema es como es.
 
+### 3 de septiembre de 2026 (tanda 16) — Fechas del Excel, Gantt en orden, y punto de retorno
+
+- **`VOLVER-ATRAS.md`**, escrito ANTES de tocar nada porque Eddy lo pidió así. Empieza por el
+  rollback instantáneo de Vercel, que no toca el repositorio. Deja claro lo que siempre se
+  confunde: volver el código atrás **no deshace** lo que una migración escribió en la base. El
+  código se recupera en un minuto; los datos, solo si hay respaldo — y no lo hay.
+  Punto de retorno: `71c48dd` / `dpl_GPQ11yPjLPfmRYF84HnNa5caLXhn`.
+- **Migración `fechas_excel`:** corrige tres etapas contra el Excel del proveedor.
+  A&F BD Principal → 20 ago 2026 – **8 feb 2027**; ADPRO → 21 ago 2026 – **31 dic 2026**;
+  Seguimiento → 26 may 2026 – **11 feb 2027**.
+- **Por qué estaban mal:** al importar, el fin salió de la última fecha de las tareas. Pero el
+  Excel exportó **sin fecha** una parte de ellas (20 en BD Principal, 14 en ADPRO), así que no
+  contaron y el cálculo se paró antes. La fila de resumen del Excel sí las incluye, porque MS
+  Project las tiene fechadas por dentro aunque el export las dejara vacías.
+- La 9 llega al **11 de febrero** porque Seguimiento y Cierre son **una sola etapa** aquí (dato
+  del usuario), y esa es la fecha del cierre. Por eso son 9 etapas y no 10.
+- Se identifican por un trozo distintivo del título (`ILIKE '%ADPRO%'`) y no por el número: los
+  títulos se renombraron a mano y el número de etapa no vive en ninguna columna. La migración
+  **deja traza en los logs** con las filas que tocó — un patrón que no encaje fallaría en
+  silencio, y esa es la única forma de comprobarlo sin acceso a la base.
+- **El Gantt del resumen se ordena por fecha de inicio**, no por número de etapa. El número es el
+  orden en que se crearon, no en que ocurren: la vista saltaba hacia atrás cuatro veces. Empate
+  de inicio → termina antes; empate de rango → id, para que el orden sea estable entre recargas
+  (las tres BD secundarias comparten fechas exactas y si no bailarían de sitio).
+
 ### 3 de septiembre de 2026 (tanda 15) — Retraso por etapa, fechas reales, avisos y pantallas de trabajo
 
 **1. Cada etapa lleva su propio retraso** (`lib/atraso.ts`, `components/AtrasoEtapa.tsx`).

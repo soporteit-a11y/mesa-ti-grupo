@@ -72,6 +72,18 @@ export function ProjectOverview({
 
   if (filas.length === 0) return null;
 
+  // Ordenadas por fecha de inicio, no por numero de etapa.
+  //
+  // El numero es el orden en que se crearon, no el orden en que ocurren las
+  // cosas: puestas asi, la vista saltaba hacia atras cuatro veces y no se leia
+  // como una secuencia. El ojo espera que cada barra empiece igual o mas a la
+  // derecha que la anterior; cuando no pasa, deja de entenderse el dibujo.
+  //
+  // A igual inicio manda la que termina antes, y a igual rango el numero de
+  // etapa (id), para que el orden sea estable entre recargas — las tres bases
+  // secundarias comparten fechas exactas y si no, bailarian de sitio.
+  filas.sort((a, b) => a.ini - b.ini || a.fin - b.fin || a.id - b.id);
+
   const min = Math.min(...filas.map((f) => f.ini));
   const max = Math.max(...filas.map((f) => f.fin));
   const span = Math.max(1, max - min);
